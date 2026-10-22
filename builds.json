@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "sequence": 4,
-  "generatedAt": "2026-10-22T18:14:41Z",
+  "sequence": 6,
+  "generatedAt": "2026-10-22T18:30:53Z",
   "builds": [
     {
       "upstream": "v3.10.2-lucx.307",
@@ -11,12 +11,12 @@
         "url": "https://github.com/AlexeyLCP/lucx-ui/releases/download/v3.10.2-lucx.307/x-ui-linux-amd64.tar.gz",
         "sha256": "0cd7587b048ec9b545b66b11d5c5efe9204a7bb47979a4847ffcfacba49627d4"
       },
-      "release": "v3.10.2-lucx.307-plugins.2",
+      "release": "v3.10.2-lucx.307-plugins.3",
       "build": {
-        "url": "https://github.com/AllIsA1/lucx-plugins/releases/download/v3.10.2-lucx.307-plugins.2/x-ui-plugins-linux-amd64.tar.gz",
-        "sha256": "1be2c450193db6248461b92ebcd42bd3fc3260ec63575163c5adb18b591d80d5"
+        "url": "https://github.com/AllIsA1/lucx-plugins/releases/download/v3.10.2-lucx.307-plugins.3/x-ui-plugins-linux-amd64.tar.gz",
+        "sha256": "f6125b2bd0969ac753394c3e80f780a40a2764a256b2aeed6335d0de6b98bd83"
       },
-      "binarySha256": "5a2e7131b7df22ec603d3c8aaf2dcdcb7d09c1fe7b6dd2f459b24cbb215a8e32"
+      "binarySha256": "cfe454c89e172fcdc1953120ea7122d3ef004b265defc33268956ccc63994e54"
     },
     {
       "upstream": "v3.10.2-lucx.307",
@@ -26,12 +26,12 @@
         "url": "https://github.com/AlexeyLCP/lucx-ui/releases/download/v3.10.2-lucx.307/x-ui-linux-arm64.tar.gz",
         "sha256": "592b71b4b2427b5c6a49832f98b49ca498fab3fbf460e431c647c607ddeeb8bc"
       },
-      "release": "v3.10.2-lucx.307-plugins.2",
+      "release": "v3.10.2-lucx.307-plugins.3",
       "build": {
-        "url": "https://github.com/AllIsA1/lucx-plugins/releases/download/v3.10.2-lucx.307-plugins.2/x-ui-plugins-linux-arm64.tar.gz",
-        "sha256": "46c179780850eeb59bee6c4fbbe055261ab3518cf54b18f5ccab1f2d0ed8d2bd"
+        "url": "https://github.com/AllIsA1/lucx-plugins/releases/download/v3.10.2-lucx.307-plugins.3/x-ui-plugins-linux-arm64.tar.gz",
+        "sha256": "c987356b4b0abbf683c6466ac8b2489159356634ecdacbc76fac5de0590653b6"
       },
-      "binarySha256": "9864b503f8245f93410a58fce59205eef38ea2b5679670b3d84bc76d74a552f7"
+      "binarySha256": "6a3a2a73a5329caa309df24b8765cc17fbfe4fdced8cf30ce891a6221da819d1"
     }
   ]
 }
