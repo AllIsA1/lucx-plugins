@@ -29,8 +29,10 @@ var (
 	ErrNotRunning         = errors.New("the plugin is not running")
 )
 
+// isUpgrade is true only when the request names a protocol to switch to. A bare "Connection: upgrade",
+// which reverse proxies often add to every request, is not an upgrade.
 func isUpgrade(r *http.Request) bool {
-	return r.Header.Get("Upgrade") != "" || strings.Contains(strings.ToLower(r.Header.Get("Connection")), "upgrade")
+	return strings.TrimSpace(r.Header.Get("Upgrade")) != ""
 }
 
 // Proxy forwards r to the plugin's unix socket as subpath, on behalf of user.

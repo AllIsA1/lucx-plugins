@@ -166,6 +166,32 @@ func TestProxyRefusesRequestsThatAreNotForThePluginsPublicAPI(t *testing.T) {
 	}
 }
 
+// Reverse proxies such as nginx commonly send "Connection: upgrade" on every request (often with an
+// empty "Upgrade" header). Only a request that names a protocol to upgrade to is an upgrade.
+func TestProxyServesRequestsThatCarryConnectionUpgradeButNoUpgrade(t *testing.T) {
+	e := newProxyEnv(t, nil)
+	for name, headers := range map[string][][2]string{
+		"connection only":    {{"Connection", "upgrade"}},
+		"empty upgrade":      {{"Connection", "upgrade"}, {"Upgrade", ""}},
+		"keep-alive,upgrade": {{"Connection", "keep-alive, Upgrade"}},
+	} {
+		req := httptest.NewRequest(http.MethodGet, "/x", nil)
+		for _, h := range headers {
+			req.Header.Set(h[0], h[1])
+		}
+		w, err := e.do(req, "/ui/index.html")
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if w.Code != http.StatusOK {
+			t.Errorf("%s: status %d, the page must be served", name, w.Code)
+		}
+		if got := e.last(t).Header.Get("Connection"); strings.Contains(strings.ToLower(got), "upgrade") {
+			t.Errorf("%s: the plugin was sent Connection: %q", name, got)
+		}
+	}
+}
+
 func TestProxyPreflightErrors(t *testing.T) {
 	e := newSupEnv(t, nil)
 	w := httptest.NewRecorder()
