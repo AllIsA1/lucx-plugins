@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# Copyright (c) 2026 AllIsA1.
+# Licensed under the PolyForm Noncommercial License 1.0.0.
+# Commercial use (including VPN resale) requires explicit written permission from the author.
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 # Shared helpers for the overlay scripts.
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)

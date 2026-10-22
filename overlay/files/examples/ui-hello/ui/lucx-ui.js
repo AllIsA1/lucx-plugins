@@ -1,4 +1,4 @@
-// Copyright (c) 2026 LucX-UI Project.
+// Copyright (c) 2026 AllIsA1.
 // SPDX-License-Identifier: MIT
 //
 // lucx-ui.js — the page side of the panel bridge. Copy this file into your plugin's ui/ directory

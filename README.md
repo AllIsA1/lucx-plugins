@@ -100,4 +100,7 @@ original `x-ui` to our build of the same release, and the sequence number only g
 
 ## License
 
-Not decided yet; see the notes in each file's header. Do not redistribute builds until this section says otherwise.
+This repository is the LucX plugin system only; LucX-UI and 3x-ui are separate projects by separate, independent authors and are not covered. The plugin system and this repository's tooling are
+**PolyForm Noncommercial 1.0.0** (free for personal, educational and other noncommercial use; commercial use needs the owner's written
+permission), the examples and page SDK are **MIT**. Builds contain LucX-UI under its own licenses. Details and the exact scope:
+[LICENSING.md](LICENSING.md).

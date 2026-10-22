@@ -1,4 +1,4 @@
-# Copyright (c) 2026 LucX-UI Project.
+# Copyright (c) 2026 AllIsA1.
 # SPDX-License-Identifier: MIT
 
 # Builds the binaries the panel installs: bin/<arch>/$(NAME) for each supported CPU.

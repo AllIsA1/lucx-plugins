@@ -1,3 +1,8 @@
+// Copyright (c) 2026 AllIsA1.
+// Licensed under the PolyForm Noncommercial License 1.0.0.
+// Commercial use (including VPN resale) requires explicit written permission from the author.
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
 // Command lucx-plugins-sync keeps a server's panel binary in step with the signed builds list.
 // It runs before the panel starts (at-start), from a timer (check, apply) and when the plugin
 // system is removed (restore).

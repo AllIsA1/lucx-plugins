@@ -262,6 +262,8 @@ jobs:
             done
             echo
             echo "Source: upstream \`$(jq -r .upstreamCommit dl/build-amd64.json)\`, overlay \`$(jq -r .overlayCommit dl/build-amd64.json)\`."
+            echo
+            echo "Licenses: the panel is LucX-UI (by its own, independent author) under its own licenses; the plugin system laid over it is by AllIsA1 under PolyForm Noncommercial 1.0.0. See LICENSING.md in this repository."
           } > notes.md
           gh release create "$release" -R "$GITHUB_REPOSITORY" --title "$release" --notes-file notes.md \
             dl/x-ui-plugins-linux-amd64.tar.gz dl/x-ui-plugins-linux-arm64.tar.gz
