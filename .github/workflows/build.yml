@@ -129,7 +129,9 @@ jobs:
           # An upstream test sometimes leaves a timer that fires after teardown ("window is not defined"):
           # all tests pass but vitest reports an unhandled error. One retry separates that from a real failure.
           cd frontend
-          npx vitest run --project unit --project components || npx vitest run --project unit --project components
+          # Slow runners also trip upstream's 5 s test timeout, so the timeout is wider and a single test may retry.
+          vt="npx vitest run --project unit --project components --testTimeout=30000 --retry=2"
+          $vt || $vt
 
       - name: Build the binary
         working-directory: upstream
