@@ -236,6 +236,9 @@ func TestAtStartSwapsAKnownOriginalForOurBuild(t *testing.T) {
 	if st.Ours != sum([]byte(oursSrc)) || st.Original != sum([]byte(originalSrc)) || st.Upstream != upstreamTag {
 		t.Errorf("state = %+v", st)
 	}
+	if st.Release != upstreamTag+"-plugins.1" {
+		t.Errorf("Release = %q, the panel shows which build is installed", st.Release)
+	}
 	if err := e.agent.AtStart(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -399,6 +402,9 @@ func TestUpgradesAnOlderBuildOfTheSameRelease(t *testing.T) {
 	}
 	if e.panelSrc() != newer {
 		t.Fatalf("the rebuilt release was not picked up: %q", e.panelSrc())
+	}
+	if got := e.agent.Status().Release; got != upstreamTag+"-plugins.2" {
+		t.Errorf("Release after the upgrade = %q", got)
 	}
 	if saved, err := os.ReadFile(filepath.Join(e.stateDir, "originals", sum([]byte(originalSrc)), "x-ui")); err != nil || string(saved) != originalSrc {
 		t.Errorf("the original must stay available: %v", err)

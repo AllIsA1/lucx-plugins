@@ -28,6 +28,7 @@ git -C "$tree" add -A -N .
 added=0 changed=0 locales=0
 while IFS=$'\t' read -r status path; do
   excluded "$path" && continue
+  [[ -L $tree/$path ]] && die "$path is a symlink; remove it (a node_modules link does this) before exporting"
   case $status in
     A)
       mkdir -p "$out/files/$(dirname "$path")"

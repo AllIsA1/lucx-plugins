@@ -17,6 +17,7 @@ type State struct {
 	Original    string    `json:"original"`    // sha256 of the upstream binary we replaced
 	Ours        string    `json:"ours"`        // sha256 of the build we installed
 	Upstream    string    `json:"upstream"`
+	Release     string    `json:"release"` // our release tag, <upstream>-plugins.<n>
 	SwappedAt   time.Time `json:"swappedAt"`
 	CheckedAt   time.Time `json:"checkedAt"`
 	Pending     bool      `json:"pending"` // a swap is waiting for the panel's next start

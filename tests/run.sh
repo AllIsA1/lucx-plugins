@@ -73,6 +73,13 @@ if "$ROOT/scripts/apply.sh" "$work/removed" > /dev/null 2> "$work/removed.err"; 
 elif grep -q "missing upstream: internal/eventbus/events.go" "$work/removed.err"; then ok "a removed upstream file fails the apply"
 else bad "a removed upstream file fails the apply" "$(cat "$work/removed.err")"; fi
 
+# 6b. export refuses a symlink in the tree instead of exporting half an overlay
+ln -s /tmp "$work/rt/frontend/node_modules"
+if OVERLAY_OUT="$work/overlay-link" "$ROOT/scripts/export.sh" "$work/rt" "$tag" > /dev/null 2> "$work/link.err"; then bad "export refuses a symlink"
+elif grep -q "is a symlink" "$work/link.err"; then ok "export refuses a symlink"
+else bad "export refuses a symlink" "$(cat "$work/link.err")"; fi
+rm -f "$work/rt/frontend/node_modules"
+
 # 7. the optional seed comparison.
 if [[ -n ${LUCX_SEED_REPO:-} && -n ${LUCX_SEED_REF:-} ]]; then
   mismatches=0

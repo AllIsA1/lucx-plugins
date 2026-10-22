@@ -58,6 +58,9 @@ func NewPluginsController(g *gin.RouterGroup, svc *service.PluginService) *Plugi
 	g.POST("/update/:id", a.update)
 	g.POST("/rollback/:id", a.rollback)
 	g.GET("/logs/:id", a.logs)
+	g.GET("/system", a.systemStatus)
+	g.POST("/system/check", a.systemCheck)
+	g.POST("/system/update", a.systemUpdate)
 	g.GET("/x/:id/*path", a.proxy)
 	g.POST("/x/:id/*path", a.proxy)
 	g.PUT("/x/:id/*path", a.proxy)
@@ -422,4 +425,16 @@ func extendWriteDeadline(c *gin.Context, d time.Duration) {
 		}
 	}
 	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(d))
+}
+
+func (a *PluginsController) systemStatus(c *gin.Context) {
+	jsonObj(c, a.svc.SystemStatus(c.Request.Context()), nil)
+}
+
+func (a *PluginsController) systemCheck(c *gin.Context) {
+	done(c, "plugins: cannot check for a newer plugin system", a.svc.CheckSystem(c.Request.Context()))
+}
+
+func (a *PluginsController) systemUpdate(c *gin.Context) {
+	done(c, "plugins: cannot update the plugin system", a.svc.UpdateSystem(c.Request.Context()))
 }

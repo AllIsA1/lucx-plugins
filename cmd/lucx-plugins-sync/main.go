@@ -175,7 +175,7 @@ func printStatus(w io.Writer, st agent.State, cfg config) {
 	if st.Ours == "" {
 		fmt.Fprintln(w, "the panel binary is not a known build with the plugin system")
 	} else {
-		fmt.Fprintf(w, "plugin build installed for %s since %s\n", st.Upstream, st.SwappedAt.Format("2006-01-02 15:04 MST"))
+		fmt.Fprintf(w, "plugin build installed for %s (%s) since %s\n", st.Upstream, st.Release, st.SwappedAt.Format("2006-01-02 15:04 MST"))
 	}
 	if st.Pending {
 		fmt.Fprintf(w, "a plugin build is ready and will be installed at the next panel start (automatic restart around %s)\n", cfg.RestartAt)

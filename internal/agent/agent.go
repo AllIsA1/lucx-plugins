@@ -128,7 +128,7 @@ func (a *Agent) swap(ctx context.Context, from string, b *builds.Build, st *Stat
 	if err := replaceFile(built, a.cfg.PanelBinary); err != nil {
 		return err
 	}
-	st.Original, st.Ours, st.Upstream = b.OriginalBinarySha256, b.BinarySha256, b.Upstream
+	st.Original, st.Ours, st.Upstream, st.Release = b.OriginalBinarySha256, b.BinarySha256, b.Upstream, b.Release
 	st.SwappedAt = time.Now().UTC()
 	st.Pending = false
 	st.LastError = ""
@@ -188,7 +188,7 @@ func (a *Agent) AtStart(ctx context.Context) error {
 	k, b := a.decide(idx, h, st)
 	if k == none {
 		if b != nil { // already our current build
-			st.Ours, st.Original, st.Upstream, st.Pending, st.LastError = b.BinarySha256, b.OriginalBinarySha256, b.Upstream, false, ""
+			st.Ours, st.Original, st.Upstream, st.Release, st.Pending, st.LastError = b.BinarySha256, b.OriginalBinarySha256, b.Upstream, b.Release, false, ""
 		}
 		return nil
 	}
@@ -285,7 +285,7 @@ func (a *Agent) Restore(ctx context.Context) (bool, error) {
 	if err := replaceFile(src, a.cfg.PanelBinary); err != nil {
 		return false, err
 	}
-	st.Original, st.Ours, st.Upstream, st.Pending, st.LastError = "", "", "", false, ""
+	st.Original, st.Ours, st.Upstream, st.Release, st.Pending, st.LastError = "", "", "", "", false, ""
 	_ = a.saveState(st)
 	a.cfg.Log("restored the original panel binary")
 	return true, nil

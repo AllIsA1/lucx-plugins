@@ -22,6 +22,8 @@ import (
 type PluginService struct {
 	Provider   func() (*plugins.Manager, error)
 	Supervisor func() *plugins.Supervisor
+	// System reads and drives the plugin system's own installer (the build with plugins, not a plugin).
+	System *plugins.SystemControl
 	// UpdateHealthTimeout is how long an updated process gets to become healthy before the update is undone.
 	UpdateHealthTimeout time.Duration
 }
@@ -30,7 +32,7 @@ const defaultUpdateHealthTimeout = 30 * time.Second
 
 // NewPluginService binds the service to the process-wide plugin manager.
 func NewPluginService() *PluginService {
-	return &PluginService{Provider: plugins.Get, Supervisor: plugins.GetSupervisor}
+	return &PluginService{Provider: plugins.Get, Supervisor: plugins.GetSupervisor, System: plugins.NewSystemControl()}
 }
 
 // PluginView is an installed plugin plus the live state of its process.
@@ -424,4 +426,28 @@ func (s *PluginService) InstallPinned(ctx context.Context, req plugins.PinnedIns
 		return plugins.Entry{}, err
 	}
 	return m.InstallPinned(ctx, req)
+}
+
+// SystemStatus describes the installed build of the plugin system and whether a newer one waits.
+func (s *PluginService) SystemStatus(ctx context.Context) plugins.SystemStatus {
+	if s.System == nil {
+		return plugins.SystemStatus{Reason: "not-installed"}
+	}
+	return s.System.Status(ctx)
+}
+
+// CheckSystem starts a check for a newer build of the plugin system.
+func (s *PluginService) CheckSystem(ctx context.Context) error {
+	if s.System == nil {
+		return plugins.ErrSystemNotManaged
+	}
+	return s.System.Check(ctx)
+}
+
+// UpdateSystem starts the update; when a newer build is ready the panel restarts to install it.
+func (s *PluginService) UpdateSystem(ctx context.Context) error {
+	if s.System == nil {
+		return plugins.ErrSystemNotManaged
+	}
+	return s.System.Update(ctx)
 }

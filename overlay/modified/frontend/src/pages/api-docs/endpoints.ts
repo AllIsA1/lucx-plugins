@@ -1662,6 +1662,26 @@ export const sections: readonly Section[] = [
       },
       {
         method: 'GET',
+        path: '/panel/api/plugins/system',
+        summary:
+          'The plugin system itself (the build of the panel that has plugins, not a plugin): which build is installed, whether a newer one is ready (pending: it is installed at the next start of the panel, at restartAt or on request) and whether a check or update is running now (busy). managed is false, with a reason (not-installed or units-missing), when the plugin system was not put on this host by its installer. Reads the installer state file; no network. Admin session or admin token only: not available to plugin tokens or to a master panel. LucX-UI only.',
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "managed": true,\n    "upstream": "v3.10.2-lucx.307",\n    "release": "v3.10.2-lucx.307-plugins.3",\n    "swappedAt": "2026-10-22T18:04:11Z",\n    "checkedAt": "2026-10-22T19:00:00Z",\n    "pending": false,\n    "busy": false,\n    "restartAt": "04:00"\n  }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/plugins/system/check',
+        summary:
+          'Start a check for a newer build of the plugin system (the installer unit lucx-plugins-sync.service). Returns at once; it never restarts the panel. Poll GET /panel/api/plugins/system. Fails when the plugin system is not managed by the installer or a job is already running. Admin only. LucX-UI only.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/plugins/system/update',
+        summary:
+          'Check for a newer build and, when one is ready, install it: the installer unit lucx-plugins-apply.service restarts the panel, and the start hook swaps the binary. Returns at once, before the restart; connections to the panel drop for a few seconds. Fails when the plugin system is not managed by the installer or a job is already running. Admin only. LucX-UI only.',
+      },
+      {
+        method: 'GET',
         path: '/panel/api/plugins/x/:id/*path',
         summary:
           'Forward a GET to the plugin process (unix socket), or, for an interface plugin (type ui), serve a file below its ui/ directory (/ui/index.html; a path ending in / serves index.html there; no listing). The panel authenticates the caller, the plugin never sees the cookie, Authorization or CSRF header and receives X-LucX-User, X-LucX-Plugin-Id and X-LucX-Request-Id instead. Every response is sandboxed (pages themselves are opened through the token address of frame-token): Set-Cookie and CORS headers are dropped, Content-Security-Policy is forced to a script-only sandbox without network access and the page may be framed by the panel only. 404 for an unknown plugin, reserved path or missing file, 503 when the plugin is not running or disabled, 502 when it does not answer, 405 for a non-GET on a static page. Plugin API tokens cannot use this route. LucX-UI only.',
