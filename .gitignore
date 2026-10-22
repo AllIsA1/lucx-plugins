@@ -1,2 +1,3 @@
 work/
 *.key
+examples/*/bin/
