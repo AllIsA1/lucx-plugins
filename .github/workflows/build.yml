@@ -161,8 +161,8 @@ jobs:
           fi
           LDFLAGS="-w -s -linkmode external -extldflags '-static' -X github.com/mhsanaei/3x-ui/v3/internal/config.lucxVersion=${TAG_LUCX}"
           go build -buildvcs=true -ldflags "$LDFLAGS" -o "$GITHUB_WORKSPACE/x-ui-built" -v .
-          file "$GITHUB_WORKSPACE/x-ui-built"
-          ldd "$GITHUB_WORKSPACE/x-ui-built" 2>&1 | grep -qiE 'not a dynamic|statically linked' || { echo "the binary is not static" >&2; exit 1; }
+          file "$GITHUB_WORKSPACE/x-ui-built" | tee /tmp/file.txt
+          grep -q 'statically linked' /tmp/file.txt || { echo "the binary is not static" >&2; exit 1; }
 
       - name: Smoke test (amd64 only)
         if: matrix.arch == 'amd64'
