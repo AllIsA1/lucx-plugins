@@ -3,12 +3,12 @@
 # SPDX-License-Identifier: MIT
 # Installs the plugin system next to a LucX-UI panel that is already running.
 #
-#   bash <(curl -fL https://raw.githubusercontent.com/AllIsA1/lucx-plugins/main/installer/install.sh)
+#   curl -fL https://raw.githubusercontent.com/AllIsA1/lucx-plugins/main/installer/install.sh | sudo bash
 #
 # What it does: puts a small program (lucx-plugins-sync) in /usr/local/lucx-plugins, a systemd drop-in
 # that runs it before the panel starts, and two timers. The program recognises the panel binary by its
 # hash and, if the signed list has the matching build with plugins, swaps it in. Nothing else of the
-# panel is touched. Options: --service NAME  --panel PATH  --restart-at HH:MM  --no-restart
+# panel is touched. Options (after `bash -s --`): --service NAME  --panel PATH  --restart-at HH:MM  --no-restart
 set -euo pipefail
 
 usage() {
@@ -137,4 +137,4 @@ echo
 "$SYNC" -config "$CONF" status
 echo
 say "Installed. The panel gets the plugin system at its next start; after a panel update it is installed again automatically."
-say "Remove it with: bash <(curl -fL https://raw.githubusercontent.com/AllIsA1/lucx-plugins/main/installer/uninstall.sh)"
+say "Remove it with: curl -fL https://raw.githubusercontent.com/AllIsA1/lucx-plugins/main/installer/uninstall.sh | sudo bash"

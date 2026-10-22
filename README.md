@@ -24,10 +24,11 @@ its hash and swaps in the build with plugins. A binary it does not recognise is 
 On a server that already runs LucX-UI under systemd, as root:
 
 ```
-bash <(curl -fL https://raw.githubusercontent.com/AllIsA1/lucx-plugins/main/installer/install.sh)
+curl -fL https://raw.githubusercontent.com/AllIsA1/lucx-plugins/main/installer/install.sh | sudo bash
 ```
 
-Options: `--service NAME` (default `x-ui`), `--panel PATH`, `--restart-at HH:MM` (default `04:00`), `--no-restart`.
+Pass options after `bash -s --`, for example `… | sudo bash -s -- --no-restart`. (Do not use `sudo bash <(curl …)`: sudo does not pass that file
+descriptor on. As root, drop the `sudo`.) Options: `--service NAME` (default `x-ui`), `--panel PATH`, `--restart-at HH:MM` (default `04:00`), `--no-restart`.
 
 It installs `lucx-plugins-sync` in `/usr/local/lucx-plugins`, a systemd drop-in `x-ui.service.d/30-lucx-plugins.conf` that runs it
 before every start of the panel (`ExecStartPre=-+…`: it cannot stop the panel from starting), and two timers: one checks for new
@@ -36,7 +37,7 @@ exists, the panel restarts once and has the **Plugins** page. After `x-ui update
 swapped again, or, if our build for that release is not published yet, at the first quiet hour after it is.
 
 ```
-bash <(curl -fL https://raw.githubusercontent.com/AllIsA1/lucx-plugins/main/installer/uninstall.sh) [--purge]
+curl -fL https://raw.githubusercontent.com/AllIsA1/lucx-plugins/main/installer/uninstall.sh | sudo bash -s -- [--purge]
 ```
 
 puts the original binary back (from the copy it kept, or from the upstream release, checked against the signed hash) and removes

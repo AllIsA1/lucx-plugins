@@ -126,6 +126,25 @@ for mode in no-restart restart; do
   fi
 done
 
+# 6c. the documented one-liner pipes the script into bash (and sudo cannot pass a <(...) file descriptor on)
+r=$work/g
+new_root "$r"
+rm -rf "$r/etc/lucx-plugins"
+mkdir -p "$work/raw/installer"
+cp installer/*.sh "$work/raw/installer/"
+# shellcheck disable=SC2002 # the cat mimics `curl ... | bash`
+if (cat "$work/raw/installer/install.sh" | LUCX_ROOT=$r LUCX_SYSTEMCTL=$r/bin/systemctl LUCX_PLUGINS_SYNC_URL=file://$dist LUCX_PLUGINS_RAW=file://$work/raw bash -s -- --no-restart > "$work/g.out" 2>&1); then
+  [[ -x $r/usr/local/lucx-plugins/lucx-plugins-sync ]] && ok "install works when piped into bash" || bad "install works when piped into bash" "nothing installed"
+else
+  bad "install works when piped into bash" "$(tail -4 "$work/g.out")"
+fi
+# shellcheck disable=SC2002
+if (cat "$work/raw/installer/uninstall.sh" | LUCX_ROOT=$r LUCX_SYSTEMCTL=$r/bin/systemctl LUCX_PLUGINS_RAW=file://$work/raw bash -s > "$work/g2.out" 2>&1); then
+  [[ ! -e $r/usr/local/lucx-plugins ]] && ok "uninstall works when piped into bash" || bad "uninstall works when piped into bash" "files left"
+else
+  bad "uninstall works when piped into bash" "$(tail -4 "$work/g2.out")"
+fi
+
 # 7. refuses to run without a panel binary or with bad options
 r=$work/e
 new_root "$r"
