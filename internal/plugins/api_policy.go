@@ -3,7 +3,10 @@
 
 package plugins
 
-import "net/http"
+import (
+	"net/http"
+	"sort"
+)
 
 // APIRoute is one panel API route, as a gin pattern relative to /panel/api.
 type APIRoute struct {
@@ -94,6 +97,28 @@ func AllowAPI(perms []string, method, pattern string) bool {
 		}
 	}
 	return false
+}
+
+// AllowedRoutes lists the panel routes the permissions grant, sorted and without duplicates. The
+// gateway hands it to the panel, which enforces it against the route it really resolves.
+func AllowedRoutes(perms []string) []APIRoute {
+	seen := map[APIRoute]bool{}
+	var out []APIRoute
+	for _, perm := range perms {
+		for _, r := range apiPolicy[perm] {
+			if !seen[r] {
+				seen[r] = true
+				out = append(out, r)
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Pattern != out[j].Pattern {
+			return out[i].Pattern < out[j].Pattern
+		}
+		return out[i].Method < out[j].Method
+	})
+	return out
 }
 
 // APIPolicyRoutes lists every route some permission can grant; tests check

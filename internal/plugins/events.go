@@ -202,6 +202,26 @@ func (s *Supervisor) HasPipeline(name string) bool {
 	return false
 }
 
+// Subscriptions lists the events some enabled process plugin wants and the pipelines one holds, so
+// the panel can skip building payloads nobody will read.
+func (s *Supervisor) Subscriptions() (events, pipelines []string) {
+	entries := s.mgr.List()
+	for _, name := range KnownEvents() {
+		for _, e := range entries {
+			if wantsProcess(e) && subscribed(e, name) {
+				events = append(events, name)
+				break
+			}
+		}
+	}
+	for _, name := range []string{PipelineXrayConfig} {
+		if s.HasPipeline(name) {
+			pipelines = append(pipelines, name)
+		}
+	}
+	return events, pipelines
+}
+
 // HasPipeline reports whether any plugin would transform the named pipeline.
 func HasPipeline(name string) bool {
 	if s := GetSupervisor(); s != nil {

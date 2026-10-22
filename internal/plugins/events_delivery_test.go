@@ -216,3 +216,20 @@ func TestWantedReflectsEnabledSubscribers(t *testing.T) {
 }
 
 var _ = context.Background
+
+func TestSubscriptionsListWhatRunningPluginsWantSoThePanelCanSkipTheRest(t *testing.T) {
+	e, _ := eventEnv(t, []string{"events:client.created", "pipeline:xray.config"}, nil)
+	events, pipelines := e.sup.Subscriptions()
+	if len(events) != 1 || events[0] != "client.created" {
+		t.Errorf("events = %v", events)
+	}
+	if len(pipelines) != 1 || pipelines[0] != PipelineXrayConfig {
+		t.Errorf("pipelines = %v", pipelines)
+	}
+	if err := e.m.SetEnabled("traffic-alerts", false); err != nil {
+		t.Fatal(err)
+	}
+	if events, pipelines := e.sup.Subscriptions(); len(events) != 0 || len(pipelines) != 0 {
+		t.Errorf("a disabled plugin still holds subscriptions: %v %v", events, pipelines)
+	}
+}

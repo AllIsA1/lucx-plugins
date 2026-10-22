@@ -143,3 +143,40 @@ func TestSensitiveAPIPermissionsAreDangerous(t *testing.T) {
 		}
 	}
 }
+
+func TestAllowedRoutesListsOnlyWhatThePermissionsGrant(t *testing.T) {
+	has := func(routes []APIRoute, method, pattern string) bool {
+		for _, r := range routes {
+			if r.Method == method && r.Pattern == pattern {
+				return true
+			}
+		}
+		return false
+	}
+	read := AllowedRoutes([]string{"api:clients:read"})
+	if !has(read, "GET", "/clients/list") {
+		t.Errorf("a clients:read plugin must be allowed GET /clients/list: %v", read)
+	}
+	if has(read, "POST", "/clients/add") || has(read, "POST", "/inbounds/add") {
+		t.Errorf("a read permission leaked a write route: %v", read)
+	}
+	if got := AllowedRoutes(nil); len(got) != 0 {
+		t.Errorf("no permissions, yet routes were allowed: %v", got)
+	}
+	if got := AllowedRoutes([]string{"network", "ui:menu"}); len(got) != 0 {
+		t.Errorf("permissions that are not API permissions grant no routes: %v", got)
+	}
+	// Whatever AllowedRoutes says must agree with AllowAPI, the decision the panel used to make itself.
+	all := allAPIPermissions()
+	for _, r := range AllowedRoutes(all) {
+		if !AllowAPI(all, r.Method, r.Pattern) {
+			t.Errorf("AllowedRoutes lists %s %s but AllowAPI refuses it", r.Method, r.Pattern)
+		}
+	}
+	routes := AllowedRoutes(all)
+	for i := 1; i < len(routes); i++ {
+		if routes[i-1].Pattern > routes[i].Pattern {
+			t.Fatalf("the list must be sorted so the header is stable: %v before %v", routes[i-1], routes[i])
+		}
+	}
+}
