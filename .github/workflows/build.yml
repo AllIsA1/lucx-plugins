@@ -61,15 +61,12 @@ jobs:
           fi
           if [ -z "$tags" ]; then
             echo "nothing to build"
-            echo "has=false" >> "$GITHUB_OUTPUT"
-            echo "tags=[]" >> "$GITHUB_OUTPUT"
-            echo "publish=false" >> "$GITHUB_OUTPUT"
+            { echo "has=false"; echo "tags=[]"; echo "publish=false"; } >> "$GITHUB_OUTPUT"
             exit 0
           fi
           json=$(printf '%s\n' "$tags" | jq -R . | jq -sc .)
           echo "building: $json"
-          echo "has=true" >> "$GITHUB_OUTPUT"
-          echo "tags=$json" >> "$GITHUB_OUTPUT"
+          { echo "has=true"; echo "tags=$json"; } >> "$GITHUB_OUTPUT"
           # Publishing needs the repository switch; a manual run also has to ask for it.
           publish=false
           if [ "$PUBLISH_ENABLED" = "true" ]; then
@@ -140,7 +137,7 @@ jobs:
           TAG: ${{ matrix.tag }}
         run: |
           set -euo pipefail
-          CURL_RETRY="--retry 5 --retry-all-errors --retry-delay 3"
+          CURL_RETRY=(--retry 5 --retry-all-errors --retry-delay 3)
           export CGO_ENABLED=1 GOOS=linux GOARCH="$ARCH"
           # Prebuilt musl cross toolchains, as upstream does, so the binary is static and runs on any distro.
           case "$ARCH" in
@@ -149,9 +146,9 @@ jobs:
             *) echo "unsupported arch $ARCH" >&2; exit 1 ;;
           esac
           BASE="https://toolchains.bootlin.com/downloads/releases/toolchains/$BOOTLIN_ARCH/tarballs/"
-          NAME=$(curl -fsSL $CURL_RETRY "$BASE" | grep -oE "${BOOTLIN_ARCH}--musl--stable-[^\"]+\.tar\.xz" | sort -r | head -n1)
+          NAME=$(curl -fsSL "${CURL_RETRY[@]}" "$BASE" | grep -oE "${BOOTLIN_ARCH}--musl--stable-[^\"]+\.tar\.xz" | sort -r | head -n1)
           [ -z "$NAME" ] && { echo "no Bootlin musl toolchain for $BOOTLIN_ARCH" >&2; exit 1; }
-          (cd /tmp && curl -fL -sS $CURL_RETRY -o "$NAME" "$BASE$NAME" && tar -xf "$NAME")
+          (cd /tmp && curl -fL -sS "${CURL_RETRY[@]}" -o "$NAME" "$BASE$NAME" && tar -xf "$NAME")
           TOOLCHAIN=$(find /tmp -maxdepth 1 -type d -name "${BOOTLIN_ARCH}--musl--stable-*" | head -n1)
           export PATH="$TOOLCHAIN/bin:$PATH"
           CC=$(find "$TOOLCHAIN/bin" -name '*-gcc.br_real' -type f -executable | head -n1)
