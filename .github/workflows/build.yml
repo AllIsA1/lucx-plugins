@@ -1,0 +1,339 @@
+name: Build plugin-enabled releases
+
+# Finds LucX-UI releases that have no plugin-enabled build yet, lays the overlay over each one,
+# builds and tests it, and (when publishing is switched on) publishes it and updates the signed
+# builds.json. The binary recipe follows the upstream release workflow, so the result behaves like
+# the original binary.
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Upstream release tag to build (default: new releases since build/since)"
+        required: false
+        type: string
+      publish:
+        description: "Publish the result (also needs the repository variable PUBLISH_ENABLED=true)"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_REPO: AlexeyLCP/lucx-ui
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      tags: ${{ steps.pick.outputs.tags }}
+      has: ${{ steps.pick.outputs.has }}
+      publish: ${{ steps.pick.outputs.publish }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Pick the releases to build
+        id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_PUBLISH: ${{ inputs.publish }}
+          PUBLISH_ENABLED: ${{ vars.PUBLISH_ENABLED }}
+        run: |
+          set -euo pipefail
+          since=$(tr -d '[:space:]' < build/since)
+          if [ -n "$INPUT_TAG" ]; then
+            tags=$(printf '%s\n' "$INPUT_TAG")
+          else
+            built=$(gh release list -R "$GITHUB_REPOSITORY" --limit 300 --json tagName --jq '.[].tagName' | sed -E 's/-plugins\.[0-9]+$//' | sort -u)
+            candidates=$(gh api "repos/$UPSTREAM_REPO/releases?per_page=30" \
+              --jq ".[] | select(.draft==false and .prerelease==false and .published_at > \"$since\") | .tag_name" |
+              grep -E '^v[0-9]+\.[0-9]+\.[0-9]+-lucx\.[0-9]+$' || true)
+            # oldest first, three per run at most
+            tags=$(comm -23 <(printf '%s\n' "$candidates" | sed '/^$/d' | sort -V) <(printf '%s\n' "$built" | sort -V) | head -3)
+          fi
+          if [ -z "$tags" ]; then
+            echo "nothing to build"
+            echo "has=false" >> "$GITHUB_OUTPUT"
+            echo "tags=[]" >> "$GITHUB_OUTPUT"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          json=$(printf '%s\n' "$tags" | jq -R . | jq -sc .)
+          echo "building: $json"
+          echo "has=true" >> "$GITHUB_OUTPUT"
+          echo "tags=$json" >> "$GITHUB_OUTPUT"
+          # Publishing needs the repository switch; a manual run also has to ask for it.
+          publish=false
+          if [ "$PUBLISH_ENABLED" = "true" ]; then
+            if [ "$GITHUB_EVENT_NAME" = "schedule" ] || [ "$INPUT_PUBLISH" = "true" ]; then publish=true; fi
+          fi
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: discover
+    if: needs.discover.outputs.has == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        tag: ${{ fromJSON(needs.discover.outputs.tags) }}
+        arch: [amd64, arm64]
+    steps:
+      - name: Checkout the overlay
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          path: ours
+
+      - name: Checkout the upstream release
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: ${{ env.UPSTREAM_REPO }}
+          ref: refs/tags/${{ matrix.tag }}
+          path: upstream
+
+      - name: Apply the overlay
+        run: ours/scripts/apply.sh upstream
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: upstream/go.mod
+          check-latest: true
+          cache-dependency-path: upstream/go.sum
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: upstream/.nvmrc
+          cache: npm
+          cache-dependency-path: upstream/frontend/package-lock.json
+
+      # internal/web/dist is gitignored and go:embed needs it, so the frontend is built first.
+      - name: Build the frontend
+        working-directory: upstream/frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Test (amd64 only)
+        if: matrix.arch == 'amd64'
+        working-directory: upstream
+        run: |
+          go test -count=1 ./internal/lucx/... ./internal/web/... ./internal/eventbus/... ./tools/...
+          (cd frontend && npx vitest run --project unit --project components)
+
+      - name: Build the binary
+        working-directory: upstream
+        env:
+          ARCH: ${{ matrix.arch }}
+          TAG: ${{ matrix.tag }}
+        run: |
+          set -euo pipefail
+          CURL_RETRY="--retry 5 --retry-all-errors --retry-delay 3"
+          export CGO_ENABLED=1 GOOS=linux GOARCH="$ARCH"
+          # Prebuilt musl cross toolchains, as upstream does, so the binary is static and runs on any distro.
+          case "$ARCH" in
+            amd64) BOOTLIN_ARCH="x86-64" ;;
+            arm64) BOOTLIN_ARCH="aarch64" ;;
+            *) echo "unsupported arch $ARCH" >&2; exit 1 ;;
+          esac
+          BASE="https://toolchains.bootlin.com/downloads/releases/toolchains/$BOOTLIN_ARCH/tarballs/"
+          NAME=$(curl -fsSL $CURL_RETRY "$BASE" | grep -oE "${BOOTLIN_ARCH}--musl--stable-[^\"]+\.tar\.xz" | sort -r | head -n1)
+          [ -z "$NAME" ] && { echo "no Bootlin musl toolchain for $BOOTLIN_ARCH" >&2; exit 1; }
+          (cd /tmp && curl -fL -sS $CURL_RETRY -o "$NAME" "$BASE$NAME" && tar -xf "$NAME")
+          TOOLCHAIN=$(find /tmp -maxdepth 1 -type d -name "${BOOTLIN_ARCH}--musl--stable-*" | head -n1)
+          export PATH="$TOOLCHAIN/bin:$PATH"
+          CC=$(find "$TOOLCHAIN/bin" -name '*-gcc.br_real' -type f -executable | head -n1)
+          [ -z "$CC" ] && { echo "no gcc.br_real in $TOOLCHAIN/bin" >&2; exit 1; }
+          export CC
+          # A tagged release carries its LucX suffix (v3.10.2-lucx.307 -> lucx.307); it must match the source.
+          TAG_LUCX="${TAG##*-}"
+          SRC_LUCX=$(grep -oP 'var lucxVersion = "\Klucx\.\d+(?=")' internal/config/config.go)
+          if [ "$TAG_LUCX" != "$SRC_LUCX" ]; then
+            echo "tag suffix '$TAG_LUCX' != lucxVersion '$SRC_LUCX' in internal/config/config.go" >&2
+            exit 1
+          fi
+          LDFLAGS="-w -s -linkmode external -extldflags '-static' -X github.com/mhsanaei/3x-ui/v3/internal/config.lucxVersion=${TAG_LUCX}"
+          go build -buildvcs=true -ldflags "$LDFLAGS" -o "$GITHUB_WORKSPACE/x-ui-built" -v .
+          file "$GITHUB_WORKSPACE/x-ui-built"
+          ldd "$GITHUB_WORKSPACE/x-ui-built" 2>&1 | grep -qiE 'not a dynamic|statically linked' || { echo "the binary is not static" >&2; exit 1; }
+
+      - name: Smoke test (amd64 only)
+        if: matrix.arch == 'amd64'
+        env:
+          TAG: ${{ matrix.tag }}
+        run: |
+          set -euo pipefail
+          "$GITHUB_WORKSPACE/x-ui-built" -v | tee /tmp/version
+          grep -q "${TAG##*-}" /tmp/version
+          d=$(mktemp -d)
+          export XUI_PORT=18080 XUI_DB_FOLDER="$d/db" XUI_BIN_FOLDER="$d/bin" XUI_LOG_FOLDER="$d/log" \
+            XUI_PLUGINS_DIR="$d/plugins" XUI_PLUGINS_DATA_DIR="$d/data" XUI_PLUGINS_RUNNER=process XUI_PLUGINS_RUNTIME_DIR="$d/run"
+          mkdir -p "$XUI_DB_FOLDER" "$XUI_BIN_FOLDER" "$XUI_LOG_FOLDER"
+          "$GITHUB_WORKSPACE/x-ui-built" > "$d/panel.log" 2>&1 &
+          pid=$!
+          for _ in $(seq 40); do curl -fsS -o /dev/null http://127.0.0.1:18080/ && break; sleep 0.5; done
+          curl -fsS -o /dev/null http://127.0.0.1:18080/
+          grep -q "plugins: manager ready" "$d/panel.log" || { cat "$d/panel.log"; echo "the plugin manager did not start" >&2; exit 1; }
+          kill "$pid"
+
+      - name: Fetch and check the original release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARCH: ${{ matrix.arch }}
+          TAG: ${{ matrix.tag }}
+        run: |
+          set -euo pipefail
+          mkdir original && cd original
+          gh release download "$TAG" -R "$UPSTREAM_REPO" --pattern "x-ui-linux-${ARCH}.tar.gz" --pattern "x-ui-linux-${ARCH}.tar.gz.sha256"
+          sha256sum -c "x-ui-linux-${ARCH}.tar.gz.sha256"
+          tar -xzf "x-ui-linux-${ARCH}.tar.gz" x-ui/x-ui
+          sha256sum "x-ui-linux-${ARCH}.tar.gz" | cut -d' ' -f1 > archive.sha256
+          sha256sum x-ui/x-ui | cut -d' ' -f1 > binary.sha256
+
+      - name: Package
+        env:
+          ARCH: ${{ matrix.arch }}
+          TAG: ${{ matrix.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p out pkg/x-ui
+          cp x-ui-built pkg/x-ui/x-ui
+          chmod 755 pkg/x-ui/x-ui
+          # Reproducible archive: the same binary always gives the same tarball hash.
+          tar -C pkg --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -cf - x-ui | gzip -n -9 > "out/x-ui-plugins-linux-${ARCH}.tar.gz"
+          jq -n \
+            --arg upstream "$TAG" --arg arch "$ARCH" \
+            --arg originalBinary "$(cat original/binary.sha256)" --arg originalArchive "$(cat original/archive.sha256)" \
+            --arg buildArchive "$(sha256sum "out/x-ui-plugins-linux-${ARCH}.tar.gz" | cut -d' ' -f1)" \
+            --arg binary "$(sha256sum pkg/x-ui/x-ui | cut -d' ' -f1)" \
+            --arg overlay "$(git -C ours rev-parse HEAD)" --arg source "$(git -C upstream rev-parse HEAD)" \
+            '{upstream:$upstream, arch:$arch, originalBinarySha256:$originalBinary, originalArchiveSha256:$originalArchive,
+              buildArchiveSha256:$buildArchive, binarySha256:$binary, overlayCommit:$overlay, upstreamCommit:$source}' > "out/build-${ARCH}.json"
+          cat "out/build-${ARCH}.json"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: build-${{ matrix.tag }}-${{ matrix.arch }}
+          path: out/*
+          retention-days: 14
+          if-no-files-found: error
+
+  publish:
+    needs: [discover, build]
+    if: needs.discover.outputs.publish == 'true' && needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      max-parallel: 1
+      matrix:
+        tag: ${{ fromJSON(needs.discover.outputs.tags) }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          pattern: build-${{ matrix.tag }}-*
+          path: dl
+          merge-multiple: true
+
+      - name: Release
+        id: release
+        env:
+          TAG: ${{ matrix.tag }}
+        run: |
+          set -euo pipefail
+          n=1
+          while gh release view "${TAG}-plugins.${n}" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1; do n=$((n + 1)); done
+          release="${TAG}-plugins.${n}"
+          {
+            echo "LucX-UI ${TAG} with the plugin system (overlay build ${n})."
+            echo
+            echo "Not a standalone install: it is picked up by the installer, which recognises the original \`x-ui\` by its hash."
+            echo
+            for a in amd64 arm64; do
+              echo "- ${a}: original binary \`$(jq -r .originalBinarySha256 dl/build-${a}.json)\`, build \`$(jq -r .binarySha256 dl/build-${a}.json)\`"
+            done
+            echo
+            echo "Source: upstream \`$(jq -r .upstreamCommit dl/build-amd64.json)\`, overlay \`$(jq -r .overlayCommit dl/build-amd64.json)\`."
+          } > notes.md
+          gh release create "$release" -R "$GITHUB_REPOSITORY" --title "$release" --notes-file notes.md \
+            dl/x-ui-plugins-linux-amd64.tar.gz dl/x-ui-plugins-linux-arm64.tar.gz
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+
+      - name: Update and sign builds.json
+        env:
+          BUILDS_SIGNING_KEY: ${{ secrets.BUILDS_SIGNING_KEY }}
+          RELEASE: ${{ steps.release.outputs.release }}
+          TAG: ${{ matrix.tag }}
+        run: |
+          set -euo pipefail
+          go build -o buildsctl ./cmd/buildsctl
+          git config user.name "lucx-plugins build"
+          git config user.email "actions@users.noreply.github.com"
+          for attempt in 1 2 3 4 5; do
+            rm -rf site
+            if git ls-remote --exit-code --heads origin builds > /dev/null 2>&1; then
+              git clone --quiet --branch builds --single-branch "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" site
+            else
+              git init --quiet -b builds site
+              git -C site remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+            fi
+            for a in amd64 arm64; do
+              ./buildsctl meta -upstream "$TAG" -arch "$a" -release "$RELEASE" \
+                -original-binary-sha256 "$(jq -r .originalBinarySha256 dl/build-${a}.json)" \
+                -original-archive-sha256 "$(jq -r .originalArchiveSha256 dl/build-${a}.json)" \
+                -build-archive-sha256 "$(jq -r .buildArchiveSha256 dl/build-${a}.json)" \
+                -binary-sha256 "$(jq -r .binarySha256 dl/build-${a}.json)" -out "meta-${a}.json"
+              ./buildsctl add -index site/builds.json -meta "meta-${a}.json"
+            done
+            ./buildsctl sign -key-env BUILDS_SIGNING_KEY -index site/builds.json
+            # The secret must belong to a key the clients trust; refuse to publish otherwise.
+            ./buildsctl verify -index site/builds.json -sig site/builds.json.sig -pub "$(paste -sd, keys/builds.pub)"
+            git -C site add builds.json builds.json.sig
+            git -C site commit --quiet -m "Add ${TAG} (${RELEASE})"
+            if git -C site push --quiet origin builds; then exit 0; fi
+            echo "push raced, retrying ($attempt)"
+            sleep $((attempt * 3))
+          done
+          echo "could not publish builds.json" >&2
+          exit 1
+
+  notify:
+    needs: [discover, build, publish]
+    if: always() && (needs.build.result == 'failure' || needs.publish.result == 'failure')
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update an issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAGS: ${{ needs.discover.outputs.tags }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          title="Build failed for ${TAGS}"
+          body="The automatic build for ${TAGS} failed: ${RUN_URL}
+
+          The usual cause is an upstream change next to a place the overlay edits; the log of the \"Apply the overlay\" step names the file. Fix the overlay (scripts/dev.sh, then scripts/export.sh) and run the workflow again."
+          gh label create build-failure -R "$GITHUB_REPOSITORY" --color B60205 --description "An automatic build failed" 2> /dev/null || true
+          existing=$(gh issue list -R "$GITHUB_REPOSITORY" --label build-failure --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" -R "$GITHUB_REPOSITORY" --body "Failed again: ${RUN_URL}"
+          else
+            gh issue create -R "$GITHUB_REPOSITORY" --title "$title" --label build-failure --body "$body"
+          fi

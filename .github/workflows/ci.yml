@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go test -count=1 ./...
+
+  scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+      - run: shellcheck scripts/*.sh tests/*.sh
+      - run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+      - name: Overlay tests against the release the overlay was made from
+        run: tests/run.sh
+
+  newest:
+    # The overlay has to keep fitting the newest upstream release, or the next build would fail.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Apply the overlay to the latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag=$(gh api repos/AlexeyLCP/lucx-ui/releases/latest --jq .tag_name)
+          echo "latest upstream release: $tag"
+          git clone --quiet --depth 1 --branch "$tag" https://github.com/AlexeyLCP/lucx-ui.git "$RUNNER_TEMP/upstream"
+          scripts/apply.sh "$RUNNER_TEMP/upstream"
