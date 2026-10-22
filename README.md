@@ -3,8 +3,8 @@
 The plugin system for the [LucX-UI](https://github.com/AlexeyLCP/lucx-ui) panel, kept as an **overlay**: this repository is not
 a fork. It holds what the plugin system adds to a LucX-UI release, and a build that lays it over each upstream release.
 
-> Status: stages 7a and 7b of the plugin system (the overlay, and the automatic build and signed list). The installer that puts
-> the result on a server comes next; there is nothing to install yet, and publishing builds is switched off.
+> Status: stages 7a–7c of the plugin system (the overlay, the automatic build and signed list, the installer). Publishing builds is
+> still switched off, so the installer has nothing to download yet; do not use it on a real server until this note is gone.
 
 ## What a user will get
 
@@ -18,6 +18,46 @@ The panel is one compiled binary with its web interface embedded, so the plugin 
 repository builds it automatically for every upstream release from the upstream source plus the overlay, and publishes a signed
 list that maps the hash of each original `x-ui` to the matching build. On the server a small script recognises the original by
 its hash and swaps in the build with plugins. A binary it does not recognise is never replaced.
+
+## Installing (when builds are published)
+
+On a server that already runs LucX-UI under systemd, as root:
+
+```
+bash <(curl -fL https://raw.githubusercontent.com/AllIsA1/lucx-plugins/main/installer/install.sh)
+```
+
+Options: `--service NAME` (default `x-ui`), `--panel PATH`, `--restart-at HH:MM` (default `04:00`), `--no-restart`.
+
+It installs `lucx-plugins-sync` in `/usr/local/lucx-plugins`, a systemd drop-in `x-ui.service.d/30-lucx-plugins.conf` that runs it
+before every start of the panel (`ExecStartPre=-+…`: it cannot stop the panel from starting), and two timers: one checks for new
+builds every 30 minutes, the other restarts the panel at the quiet hour when a build is waiting. If a build for the installed panel
+exists, the panel restarts once and has the **Plugins** page. After `x-ui update` the new original is recognised at the next start and
+swapped again, or, if our build for that release is not published yet, at the first quiet hour after it is.
+
+```
+bash <(curl -fL https://raw.githubusercontent.com/AllIsA1/lucx-plugins/main/installer/uninstall.sh) [--purge]
+```
+
+puts the original binary back (from the copy it kept, or from the upstream release, checked against the signed hash) and removes
+everything it installed. Plugins and their data stay unless `--purge` is given. The panel's own data is never touched.
+
+`lucx-plugins-sync status` says what it did and the last problem it met. `/etc/lucx-plugins/config` (`PANEL_BINARY`, `SERVICE`,
+`STATE_DIR`, `RESTART_AT`, `INDEX_URL`) is created once and then left alone; `LUCX_PLUGINS_INDEX_URL` or `INDEX_URL` points the
+program at a mirror of the signed list.
+
+### What it trusts
+
+- A panel binary is replaced only if its sha256 is listed as an upstream original in `builds.json`, the list's ed25519 signature
+  verifies against the keys built into the program (`keys/builds.pub`), and the build's archive and binary hashes match the list.
+  Any other binary, including your own build, is never touched.
+- The list only ever grows (`sequence`): an older, validly signed list is ignored. The last good list is cached, so the check
+  keeps working offline. A new binary must print its version before it is installed.
+- `install.sh` and the program itself are downloaded over HTTPS from this repository, the same trust the panel's own installer
+  has in its repository.
+
+Limits: systemd only (no OpenRC, no Docker yet); the panel restarts once when the plugin build arrives, at the chosen hour unless
+the installer finds a build right away.
 
 ## The overlay
 

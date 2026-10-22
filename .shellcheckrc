@@ -1,0 +1,4 @@
+external-sources=true
+source-path=SCRIPTDIR
+# "A && ok || bad" in the tests: ok and bad never fail, so the idiom is safe.
+disable=SC2015

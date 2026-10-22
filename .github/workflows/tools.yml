@@ -1,0 +1,71 @@
+name: Build the installer program
+
+# lucx-plugins-sync is what the installer puts on a server. It is rebuilt whenever its code changes and,
+# when publishing is on, published as the rolling release "sync-latest" that install.sh downloads from.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "cmd/lucx-plugins-sync/**"
+      - "internal/**"
+      - "keys/**"
+      - "go.mod"
+      - ".github/workflows/tools.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tools
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+      - name: Build
+        env:
+          GOARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          mkdir out
+          CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_SHA::8}" \
+            -o "out/lucx-plugins-sync-linux-${GOARCH}" ./cmd/lucx-plugins-sync
+          (cd out && sha256sum "lucx-plugins-sync-linux-${GOARCH}" | cut -d' ' -f1 > "lucx-plugins-sync-linux-${GOARCH}.sha256")
+          file "out/lucx-plugins-sync-linux-${GOARCH}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: sync-${{ matrix.arch }}
+          path: out/*
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    if: vars.PUBLISH_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          pattern: sync-*
+          path: dl
+          merge-multiple: true
+      - name: Publish the rolling release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release delete sync-latest -R "$GITHUB_REPOSITORY" --cleanup-tag --yes 2> /dev/null || true
+          gh release create sync-latest -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest=false \
+            --title "lucx-plugins-sync (rolling)" \
+            --notes "The program install.sh downloads. Rebuilt on every change to its code; not a version to pin." dl/*
