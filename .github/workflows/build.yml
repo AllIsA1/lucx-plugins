@@ -276,8 +276,6 @@ jobs:
         run: |
           set -euo pipefail
           go build -o buildsctl ./cmd/buildsctl
-          git config user.name "lucx-plugins build"
-          git config user.email "actions@users.noreply.github.com"
           for attempt in 1 2 3 4 5; do
             rm -rf site
             if git ls-remote --exit-code --heads origin builds > /dev/null 2>&1; then
@@ -298,7 +296,7 @@ jobs:
             # The secret must belong to a key the clients trust; refuse to publish otherwise.
             ./buildsctl verify -index site/builds.json -sig site/builds.json.sig -pub "$(paste -sd, keys/builds.pub)"
             git -C site add builds.json builds.json.sig
-            git -C site commit --quiet -m "Add ${TAG} (${RELEASE})"
+            git -C site -c user.name="lucx-plugins build" -c user.email="actions@users.noreply.github.com" commit --quiet -m "Add ${TAG} (${RELEASE})"
             if git -C site push --quiet origin builds; then exit 0; fi
             echo "push raced, retrying ($attempt)"
             sleep $((attempt * 3))
