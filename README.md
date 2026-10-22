@@ -3,8 +3,8 @@
 The plugin system for the [LucX-UI](https://github.com/AlexeyLCP/lucx-ui) panel, kept as an **overlay**: this repository is not
 a fork. It holds what the plugin system adds to a LucX-UI release, and a build that lays it over each upstream release.
 
-> Status: stage 7a of the plugin system (the overlay and its tools). The automatic builds and the installer that puts the result
-> on a server come next; there is nothing to install yet.
+> Status: stages 7a and 7b of the plugin system (the overlay, and the automatic build and signed list). The installer that puts
+> the result on a server comes next; there is nothing to install yet, and publishing builds is switched off.
 
 ## What a user will get
 
@@ -45,6 +45,18 @@ tests/run.sh                        round trip (apply, then export, must reprodu
 ```
 
 `LUCX_UPSTREAM` points the scripts at another copy of the upstream repository (a path or URL).
+
+## Automatic builds
+
+`.github/workflows/build.yml` runs every hour. For each upstream release newer than `build/since` that has no build yet it applies
+the overlay, builds the frontend, runs the tests, builds static `amd64` and `arm64` binaries the way the upstream release workflow
+does, checks the original release against its `.sha256`, and packs a reproducible tarball. When publishing is on it creates the
+release `<upstream tag>-plugins.<n>` and adds both builds to `builds.json` on the `builds` branch, signed with the key in the
+`BUILDS_SIGNING_KEY` secret (the matching public keys are in `keys/builds.pub`). A failed build opens an issue.
+
+Publishing needs the repository variable `PUBLISH_ENABLED=true`; a manual run also has to pass `publish`. `workflow_dispatch` with
+`tag` builds one release without publishing. `builds.json` is managed with `go run ./cmd/buildsctl`; its entries map the hash of an
+original `x-ui` to our build of the same release, and the sequence number only grows.
 
 ## License
 
