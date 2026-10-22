@@ -1,0 +1,32 @@
+{
+  "id": "hello",
+  "name": "Hello Plugin",
+  "version": "1.2.1",
+  "apiVersion": "1",
+  "description": "Minimal example: health check, a greeting, a persistent counter, a call to the panel API, event delivery, install and uninstall hooks and a page in the panel menu.",
+  "author": "LucX-UI",
+  "license": "MIT",
+  "type": "process",
+  "scope": "both",
+  "run": {
+    "command": "bin/${arch}/hello"
+  },
+  "hooks": {
+    "install": "/_lucx/install",
+    "uninstall": "/_lucx/uninstall"
+  },
+  "permissions": [
+    "api:clients:read",
+    "events:client.created",
+    "ui:menu"
+  ],
+  "ui": {
+    "menu": [
+      {
+        "title": "Hello Plugin",
+        "icon": "heart",
+        "path": "/ui/index.html"
+      }
+    ]
+  }
+}
