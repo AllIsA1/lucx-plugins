@@ -175,16 +175,7 @@ jobs:
           set -euo pipefail
           "$GITHUB_WORKSPACE/x-ui-built" -v | tee /tmp/version
           grep -q "${TAG##*-}" /tmp/version
-          d=$(mktemp -d)
-          export XUI_PORT=18080 XUI_DB_FOLDER="$d/db" XUI_BIN_FOLDER="$d/bin" XUI_LOG_FOLDER="$d/log" \
-            XUI_PLUGINS_DIR="$d/plugins" XUI_PLUGINS_DATA_DIR="$d/data" XUI_PLUGINS_RUNNER=process XUI_PLUGINS_RUNTIME_DIR="$d/run"
-          mkdir -p "$XUI_DB_FOLDER" "$XUI_BIN_FOLDER" "$XUI_LOG_FOLDER"
-          "$GITHUB_WORKSPACE/x-ui-built" > "$d/panel.log" 2>&1 &
-          pid=$!
-          for _ in $(seq 40); do curl -fsS -o /dev/null http://127.0.0.1:18080/ && break; sleep 0.5; done
-          curl -fsS -o /dev/null http://127.0.0.1:18080/
-          grep -q "plugins: manager ready" "$d/panel.log" || { cat "$d/panel.log"; echo "the plugin manager did not start" >&2; exit 1; }
-          kill "$pid"
+          ours/scripts/smoke.sh "$GITHUB_WORKSPACE/x-ui-built" 18080
 
       - name: Fetch and check the original release
         env:
