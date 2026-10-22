@@ -261,9 +261,9 @@ jobs:
               echo "- ${a}: original binary \`$(jq -r .originalBinarySha256 dl/build-${a}.json)\`, build \`$(jq -r .binarySha256 dl/build-${a}.json)\`"
             done
             echo
-            echo "Source: upstream \`$(jq -r .upstreamCommit dl/build-amd64.json)\`, overlay \`$(jq -r .overlayCommit dl/build-amd64.json)\`."
+            echo "Source: upstream \`${TAG}\` ($(jq -r .upstreamCommit dl/build-amd64.json)), https://github.com/AlexeyLCP/lucx-ui/tree/${TAG}; overlay $(jq -r .overlayCommit dl/build-amd64.json), https://github.com/${GITHUB_REPOSITORY}/tree/$(jq -r .overlayCommit dl/build-amd64.json)."
             echo
-            echo "Licenses: the panel is LucX-UI (by its own, independent author) under its own licenses; the plugin system laid over it is by AllIsA1 under PolyForm Noncommercial 1.0.0. See LICENSING.md in this repository."
+            echo "Licenses: the panel is LucX-UI, a separate and independent project that keeps its own licenses, which you must follow. The plugin system laid over it is MIT. See LICENSING.md."
           } > notes.md
           gh release create "$release" -R "$GITHUB_REPOSITORY" --title "$release" --notes-file notes.md \
             dl/x-ui-plugins-linux-amd64.tar.gz dl/x-ui-plugins-linux-arm64.tar.gz

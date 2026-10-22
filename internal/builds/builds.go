@@ -1,7 +1,5 @@
 // Copyright (c) 2026 AllIsA1.
-// Licensed under the PolyForm Noncommercial License 1.0.0.
-// Commercial use (including VPN resale) requires explicit written permission from the author.
-// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// SPDX-License-Identifier: MIT
 
 // Package builds is the signed list that tells a server which build of the plugin system matches
 // the panel binary it runs: the hash of each original upstream `x-ui` maps to our build of the

@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 # Copyright (c) 2026 AllIsA1.
-# Licensed under the PolyForm Noncommercial License 1.0.0.
-# Commercial use (including VPN resale) requires explicit written permission from the author.
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: MIT
 # Starts a built panel binary on a scratch port and checks that it serves its page and that the plugin
 # system answers (log in, GET /panel/api/plugins/list). Usage: scripts/smoke.sh <binary> [<port>]
 set -euo pipefail

@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 # Copyright (c) 2026 AllIsA1.
-# Licensed under the PolyForm Noncommercial License 1.0.0.
-# Commercial use (including VPN resale) requires explicit written permission from the author.
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: MIT
 # Starts work on the overlay: clones an upstream release and applies the overlay to it.
 #
 #   scripts/dev.sh [<tag> [<dir>]]       tag defaults to the one in overlay/BASE

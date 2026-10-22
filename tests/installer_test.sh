@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 # Copyright (c) 2026 AllIsA1.
-# Licensed under the PolyForm Noncommercial License 1.0.0.
-# Commercial use (including VPN resale) requires explicit written permission from the author.
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: MIT
 # Tests for installer/install.sh and uninstall.sh in a fake root with a stand-in systemctl.
 # The real program is built and installed; the network is never reached (INDEX_URL points nowhere).
 set -euo pipefail

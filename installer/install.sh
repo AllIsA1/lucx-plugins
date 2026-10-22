@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 # Copyright (c) 2026 AllIsA1.
-# Licensed under the PolyForm Noncommercial License 1.0.0.
-# Commercial use (including VPN resale) requires explicit written permission from the author.
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: MIT
 # Installs the plugin system next to a LucX-UI panel that is already running.
 #
 #   bash <(curl -fL https://raw.githubusercontent.com/AllIsA1/lucx-plugins/main/installer/install.sh)

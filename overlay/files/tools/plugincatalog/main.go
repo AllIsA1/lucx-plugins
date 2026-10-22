@@ -1,8 +1,5 @@
 // Copyright (c) 2026 AllIsA1.
-// Licensed under the PolyForm Noncommercial License 1.0.0.
-// LucX plugin system component, independent of LucX-UI. Free for personal and educational use.
-// Commercial use (including VPN resale) requires explicit written permission from the author.
-// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// SPDX-License-Identifier: MIT
 
 // Command plugincatalog publishes the signed plugin catalog: it makes the signing key, adds plugins to
 // index.json, signs it and checks a signature, all with the same code the panel verifies with.

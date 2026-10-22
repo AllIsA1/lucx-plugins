@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 # Copyright (c) 2026 AllIsA1.
-# Licensed under the PolyForm Noncommercial License 1.0.0.
-# Commercial use (including VPN resale) requires explicit written permission from the author.
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: MIT
 """Locale files: `diff` keeps only what the plugin system added to an upstream file, `merge` puts it back.
 
 Both read and write the exact layout upstream uses (2-space JSON, UTF-8, trailing newline), so a merged file

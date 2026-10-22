@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 # Copyright (c) 2026 AllIsA1.
-# Licensed under the PolyForm Noncommercial License 1.0.0.
-# Commercial use (including VPN resale) requires explicit written permission from the author.
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: MIT
 # Rebuilds the overlay from a working tree that holds the plugin system on top of an upstream release.
 #
 #   scripts/export.sh <tree> [<base-ref>]      (base-ref defaults to the tag recorded in overlay/BASE)

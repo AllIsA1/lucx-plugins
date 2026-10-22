@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 # Copyright (c) 2026 AllIsA1.
-# Licensed under the PolyForm Noncommercial License 1.0.0.
-# Commercial use (including VPN resale) requires explicit written permission from the author.
-# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-License-Identifier: MIT
 # Tests for the overlay scripts. Needs git, python3 and an upstream repository:
 #   LUCX_UPSTREAM  path or URL of lucx-ui (default: GitHub)
 #   LUCX_TEST_TAG  release to test against (default: the tag in overlay/BASE)
