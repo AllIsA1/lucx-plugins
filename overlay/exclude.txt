@@ -1,0 +1,10 @@
+# Paths that are never exported from, or applied to, an upstream tree (shell globs, one per line).
+# Generated files are rebuilt by scripts/generate.sh; the rest is upstream housekeeping the plugin system does not need.
+README.md
+Makefile
+docs/progress.md
+docs/LICENSING.md
+.agents/*
+frontend/public/openapi.json
+frontend/src/generated/*
+examples/*/bin/*

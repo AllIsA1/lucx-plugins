@@ -1,0 +1,53 @@
+.plugins-page {
+  --bg-page: #e6e8ec;
+  --bg-card: #ffffff;
+  min-height: 100vh;
+  background: var(--bg-page);
+}
+
+.plugins-page.is-dark {
+  --bg-page: #1a1b1f;
+  --bg-card: #23252b;
+}
+
+.plugins-page.is-dark.is-ultra {
+  --bg-page: #000;
+  --bg-card: #101013;
+}
+
+html[data-palette='warm'] .plugins-page {
+  --bg-page: #f6f2ea;
+  --bg-card: #fffdf8;
+}
+
+html[data-palette='warm'] .plugins-page.is-dark {
+  --bg-page: #17181a;
+  --bg-card: #1e1f22;
+}
+
+.plugins-page .ant-layout,
+.plugins-page .ant-layout-content,
+.plugins-page .content-shell {
+  background: transparent;
+}
+
+.plugins-page .content-area {
+  padding: 24px;
+}
+
+.plugins-page .ant-card {
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.plugins-page.is-dark .ant-card {
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+@media (max-width: 768px) {
+  .plugins-page .content-area {
+    padding: 8px;
+  }
+}

@@ -1,0 +1,70 @@
+/* LucX-UI Component (PolyForm Noncommercial 1.0.0) */
+.plugin-frame-page {
+  --bg-page: #e6e8ec;
+  --bg-card: #ffffff;
+  min-height: 100vh;
+  background: var(--bg-page);
+}
+
+.plugin-frame-page.is-dark {
+  --bg-page: #1a1b1f;
+  --bg-card: #23252b;
+}
+
+.plugin-frame-page.is-dark.is-ultra {
+  --bg-page: #000;
+  --bg-card: #101013;
+}
+
+html[data-palette='warm'] .plugin-frame-page {
+  --bg-page: #f6f2ea;
+  --bg-card: #fffdf8;
+}
+
+html[data-palette='warm'] .plugin-frame-page.is-dark {
+  --bg-page: #17181a;
+  --bg-card: #1e1f22;
+}
+
+.plugin-frame-page .ant-layout,
+.plugin-frame-page .ant-layout-content,
+.plugin-frame-page .content-shell {
+  background: transparent;
+}
+
+.plugin-frame-page .content-area {
+  padding: 24px;
+}
+
+.plugin-frame-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: calc(100dvh - 48px);
+}
+
+.plugin-frame {
+  display: block;
+  flex: 1;
+  width: 100%;
+  min-height: 320px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--bg-card);
+}
+
+/* The sandboxed frame runs in its own process, so the browser stops telling the page where the
+   pointer is once it enters it; while the sidebar is hovered the frame lets the pointer through. */
+.plugin-frame-page .ant-sidebar:hover ~ .content-shell .plugin-frame {
+  pointer-events: none;
+}
+
+@media (max-width: 768px) {
+  .plugin-frame-page .content-area {
+    padding: 8px;
+  }
+
+  .plugin-frame-body {
+    height: calc(100dvh - 16px);
+  }
+}

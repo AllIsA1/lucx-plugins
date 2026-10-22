@@ -1,0 +1,4351 @@
+export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD';
+export type ParamLocation =
+  | 'path'
+  | 'query'
+  | 'header'
+  | 'body'
+  | 'body (form)'
+  | 'body (json)'
+  | 'body (multipart)';
+export type ParamType =
+  | 'string'
+  | 'integer'
+  | 'integer[]'
+  | 'string[]'
+  | 'number'
+  | 'boolean'
+  | 'object'
+  | 'object[]'
+  | 'array'
+  | 'file';
+
+export interface EndpointParam {
+  name: string;
+  in: ParamLocation;
+  type: ParamType;
+  desc?: string;
+  optional?: boolean;
+  defaultValue?: string | number | boolean;
+  minLength?: number;
+  pattern?: string;
+  enum?: readonly (string | number | boolean)[];
+}
+
+export interface Endpoint {
+  method: HttpMethod;
+  path: string;
+  summary: string;
+  description?: string;
+  deprecated?: boolean;
+  params?: EndpointParam[];
+  body?: string;
+  response?: string;
+  errorResponse?: string;
+  errorStatus?: number;
+  requestSchema?: Record<string, unknown>;
+  bodyRequiredOneOf?: string[];
+  responseSchema?: string;
+  responseSchemaArray?: boolean;
+  responseSchemaArrayNullable?: boolean;
+  responseObjectSchema?: Record<string, unknown>;
+  responses?: Record<string, Record<string, unknown>>;
+  security?: readonly Record<string, readonly string[]>[];
+}
+
+export interface SubscriptionHeader {
+  name: string;
+  desc: string;
+}
+
+export interface Section {
+  id: string;
+  title: string;
+  description?: string;
+  subHeader?: SubscriptionHeader[];
+  endpoints: Endpoint[];
+}
+
+// /inbounds/update replaces the whole row, so it takes the same payload as /add.
+const inboundBody =
+  '{\n  "enable": true,\n  "remark": "VLESS-443",\n  "listen": "",\n  "port": 443,\n  "protocol": "vless",\n  "expiryTime": 0,\n  "total": 0,\n  "settings": {\n    "clients": [{ "id": "...", "email": "user1" }],\n    "decryption": "none",\n    "fallbacks": []\n  },\n  "streamSettings": {\n    "network": "tcp",\n    "security": "reality",\n    "realitySettings": { "show": false, "dest": "..." }\n  },\n  "sniffing": {\n    "enabled": true,\n    "destOverride": ["http", "tls"]\n  }\n}';
+
+const outboundSubscriptionBodyParams: EndpointParam[] = [
+  {
+    name: 'remark',
+    in: 'body (form)',
+    type: 'string',
+    desc: 'Optional display label.',
+    optional: true,
+  },
+  {
+    name: 'url',
+    in: 'body (form)',
+    type: 'string',
+    desc: 'Subscription URL (required). Must be a public http(s) address; private/internal targets are blocked unless allowPrivate is true.',
+  },
+  {
+    name: 'tagPrefix',
+    in: 'body (form)',
+    type: 'string',
+    desc: 'Prefix for generated outbound tags. Defaults to the lowest free "sub<N>-" prefix.',
+    optional: true,
+  },
+  {
+    name: 'userAgent',
+    in: 'body (form)',
+    type: 'string',
+    desc: 'Custom User-Agent sent when fetching this subscription. Defaults to "3x-ui-outbound-sub/1.0".',
+    optional: true,
+    defaultValue: '3x-ui-outbound-sub/1.0',
+  },
+  {
+    name: 'updateInterval',
+    in: 'body (form)',
+    type: 'integer',
+    desc: 'Seconds between auto-refreshes. Default 600.',
+    optional: true,
+    defaultValue: 600,
+  },
+  {
+    name: 'enabled',
+    in: 'body (form)',
+    type: 'boolean',
+    desc: 'Whether the subscription is active. Default true.',
+    optional: true,
+    defaultValue: true,
+  },
+  {
+    name: 'allowPrivate',
+    in: 'body (form)',
+    type: 'boolean',
+    desc: 'Allow the URL to point at a private/internal/loopback address. Default false.',
+    optional: true,
+    defaultValue: false,
+  },
+  {
+    name: 'allowInsecure',
+    in: 'body (form)',
+    type: 'boolean',
+    desc: "Skip TLS certificate verification when fetching the subscription's URL. Default false.",
+    optional: true,
+    defaultValue: false,
+  },
+  {
+    name: 'prepend',
+    in: 'body (form)',
+    type: 'boolean',
+    desc: "Place this subscription's outbounds before the manual template outbounds. Default false.",
+    optional: true,
+    defaultValue: false,
+  },
+];
+
+const subBalancerBodyParams: EndpointParam[] = [
+  {
+    name: 'remark',
+    in: 'body (form)',
+    type: 'string',
+    desc: 'Display label, used as the config remarks (required).',
+  },
+  {
+    name: 'strategy',
+    in: 'body (form)',
+    type: 'string',
+    desc: 'Balancer strategy: "leastLoad", "leastPing", "roundRobin" or "random". Default "random".',
+    optional: true,
+    defaultValue: 'random',
+  },
+  {
+    name: 'inboundIds',
+    in: 'body (form)',
+    type: 'integer[]',
+    desc: 'Repeated form keys selecting the member inbounds (required, at least one).',
+  },
+  {
+    name: 'memberWeights',
+    in: 'body (form)',
+    type: 'object',
+    desc: 'leastLoad only: JSON object mapping inbound id to a static weight > 0, e.g. {"3":0.2}. Lower weight = picked more often; absent ids weigh 1. Rejected for other strategies; entries for unselected inbounds are dropped.',
+    optional: true,
+  },
+  {
+    name: 'sortOrder',
+    in: 'body (form)',
+    type: 'integer',
+    desc: '1-based position in the subscription list. Default 1.',
+    optional: true,
+    defaultValue: 1,
+  },
+  {
+    name: 'enabled',
+    in: 'body (form)',
+    type: 'boolean',
+    desc: 'Whether the balancer is emitted. Default true on create; unchanged when omitted on update.',
+    optional: true,
+  },
+];
+
+const subscriptionHeadResponses = {
+  '200': { description: 'Subscription is available. Headers match GET; no response body.' },
+  '404': { description: 'No enabled client matches the subscription ID.' },
+  '500': { description: 'Subscription generation failed.' },
+};
+
+const hwidStatusErrorResponses = {
+  '404': { description: 'No enabled client matches the subscription ID. Empty body.' },
+  '500': { description: 'Database lookup failed. Empty body.' },
+};
+
+export const sections: readonly Section[] = [
+  {
+    id: 'authentication',
+    title: 'Authentication',
+    description:
+      'Two authentication modes are supported. UI sessions use a cookie set by the login endpoint. Programmatic clients (bots, scripts, remote panels) authenticate with a Bearer token taken from Settings → Security → API Token. Both work for every endpoint under /panel/api/*.',
+    endpoints: [
+      {
+        method: 'POST',
+        path: '/login',
+        summary:
+          'Authenticate with username + password and receive a session cookie. Required before any cookie-based API call.',
+        params: [
+          { name: 'username', in: 'body', type: 'string', desc: 'Panel admin username.' },
+          { name: 'password', in: 'body', type: 'string', desc: 'Panel admin password.' },
+          {
+            name: 'twoFactorCode',
+            in: 'body',
+            type: 'string',
+            desc: 'OTP code when 2FA is enabled. Omit otherwise.',
+            optional: true,
+          },
+        ],
+        body: '{\n  "username": "admin",\n  "password": "admin",\n  "twoFactorCode": "123456"\n}',
+        response: '{\n  "success": true,\n  "msg": "Logged in successfully"\n}',
+        errorResponse: '{\n  "success": false,\n  "msg": "Wrong username or password"\n}',
+      },
+      {
+        method: 'POST',
+        path: '/logout',
+        summary: 'Clear the session cookie. Requires the CSRF header for browser sessions.',
+        response: '{\n  "success": true\n}',
+      },
+      {
+        method: 'GET',
+        path: '/csrf-token',
+        summary:
+          'Mint a CSRF token for the current session. The SPA replays it in the X-CSRF-Token header on unsafe requests. Bearer-token callers can skip this — the middleware short-circuits CSRF for authenticated API requests.',
+        response: '{\n  "success": true,\n  "obj": "csrf-token-string"\n}',
+      },
+      {
+        method: 'GET',
+        path: '/sponsors',
+        summary:
+          'Public. Active paid sponsor placements read from the project sponsors.json (cached for 1h); entries outside their from/until window are dropped. Logos are proxied by the panel at /sponsors/logo/{name}. Used by the login page and panel sponsor slots.',
+        responseSchema: 'SponsorList',
+      },
+      {
+        method: 'POST',
+        path: '/getTwoFactorEnable',
+        summary:
+          'Returns whether 2FA is enabled on the panel — used by the login page to decide whether to show the OTP field.',
+        response: '{\n  "success": true,\n  "obj": false\n}',
+      },
+    ],
+  },
+
+  {
+    id: 'inbounds',
+    title: 'Inbounds',
+    description:
+      'Manage inbound configurations and their clients. All endpoints live under /panel/api/inbounds and require a logged-in session or Bearer token. Link-generating endpoints honour forwarded headers only when the request comes from a configured trusted proxy.',
+    endpoints: [
+      {
+        method: 'GET',
+        path: '/panel/api/inbounds/list',
+        summary:
+          'List every inbound owned by the authenticated user, including each inbound’s clientStats traffic counters. settings, streamSettings, and sniffing are returned as nested JSON objects (no escaped strings); legacy callers that send them back as JSON-encoded strings are still accepted on write.',
+        responseSchema: 'Inbound',
+        responseSchemaArray: true,
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/inbounds/list/slim',
+        summary:
+          'Same shape as /list but with settings.clients[] stripped down to {email, enable, comment} and ClientStats not enriched with UUID/SubId. Use this for list pages; fetch /get/:id when you need the full per-client payload (uuid, password, flow, ...).',
+        response:
+          '{\n  "success": true,\n  "obj": [\n    {\n      "id": 1,\n      "remark": "VLESS-443",\n      "settings": {\n        "clients": [\n          { "email": "alice", "enable": true }\n        ],\n        "decryption": "none"\n      },\n      "clientStats": []\n    }\n  ]\n}',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/inbounds/options',
+        summary:
+          'Lightweight picker projection of the authenticated user’s inbounds. Returns id, remark, tag, protocol, port, a server-computed tlsFlowCapable flag (true for VLESS on TCP with tls or reality, or on XHTTP with VLESS encryption / vlessenc enabled), and ssMethod (the Shadowsocks cipher, empty for non-Shadowsocks inbounds — used by the client UI to generate a valid Shadowsocks 2022 PSK). Use this for dropdowns and attach pickers — it skips settings, streamSettings, and clientStats so the payload stays small even on panels with thousands of clients.',
+        responseSchema: 'InboundOption',
+        responseSchemaArray: true,
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/inbounds/allLinks',
+        responseObjectSchema: { type: 'array', nullable: true, items: { type: 'string' } },
+        summary:
+          'Return every protocol URL (vless://, vmess://, trojan://, ss://, hysteria://, mtproto) across all inbounds and all of their clients. Links are rendered through the subscription engine, so the configured remark template (name-only display part) is applied per client — the same output the client info/QR pages use. Protocols without a URL form (socks, http, mixed, wireguard, dokodemo, tunnel) contribute nothing. Used by the panel’s "Export all inbound links" action.',
+        response:
+          '{\n  "success": true,\n  "obj": [\n    "vless://uuid@host:443?security=reality&...#Germany-alice",\n    "vmess://eyJ2IjoyLC..."\n  ]\n}',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/inbounds/:id/links',
+        summary:
+          'Return the share links of a single inbound, rendered through the subscription engine. For Naive inbounds this is the only source of truth: per-client credentials are HMAC-derived from the panel secret server-side, so the response carries the service-level naive+https link (authUser/authPass, same as the legacy Tunnels-page clientUrl) followed by one personal link per enabled attached client. Protocols whose links the panel renders client-side contribute their sub-engine links as well. Used by the Inbounds page "Export links" action when the frontend generator yields nothing (Naive).',
+        params: [{ name: 'id', in: 'path', type: 'number', desc: 'Inbound ID.' }],
+        response:
+          '{\n  "success": true,\n  "obj": [\n    "naive+https://svc:pass@naive.example.org:8443",\n    "naive+https://nx0000000001:abcd@naive.example.org:8443#alice"\n  ]\n}',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/inbounds/get/:id',
+        summary: 'Fetch a single inbound by numeric ID.',
+        params: [{ name: 'id', in: 'path', type: 'number', desc: 'Inbound ID.' }],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/inbounds/add',
+        summary:
+          'Create a new inbound. Send the full inbound payload (protocol, port, settings, streamSettings, sniffing, remark, expiryTime, total, enable). settings, streamSettings, and sniffing may be sent as nested JSON objects (preferred) or as JSON-encoded strings (legacy).',
+        body: inboundBody,
+        errorResponse: '{\n  "success": false,\n  "msg": "Port 443 is already in use"\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/inbounds/del/:id',
+        summary: 'Delete an inbound by ID. Also removes its associated client stats rows.',
+        params: [{ name: 'id', in: 'path', type: 'number', desc: 'Inbound ID.' }],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/inbounds/bulkDel',
+        summary:
+          'Delete many inbounds in one call. Processes the list sequentially; failures are reported per id and the rest still proceed. Restarts xray at most once.',
+        body: '{\n  "ids": [1, 2, 3]\n}',
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "deleted": 2,\n    "skipped": [\n      { "id": 3, "reason": "..." }\n    ]\n  }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/inbounds/update/:id',
+        summary:
+          'Replace an inbound’s configuration. Body shape mirrors /add, but the inbound keeps its stored client list and enable flag: settings.clients and enable in the body are ignored. Manage clients through the /panel/api/clients endpoints and toggle the inbound with /setEnable.',
+        params: [{ name: 'id', in: 'path', type: 'number', desc: 'Inbound ID.' }],
+        body: inboundBody,
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/inbounds/setEnable/:id',
+        summary:
+          'Toggle only the enable flag without serialising the whole settings JSON. Recommended for UI switches on large inbounds.',
+        params: [{ name: 'id', in: 'path', type: 'number', desc: 'Inbound ID.' }],
+        body: '{\n  "enable": false\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/inbounds/:id/subSortIndex',
+        summary:
+          'Set only the subscription sort order. Reads the stored inbound, so a reorder cannot carry a stale client list over a concurrent edit.',
+        params: [{ name: 'id', in: 'path', type: 'number', desc: 'Inbound ID.' }],
+        body: '{\n  "subSortIndex": 2\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/inbounds/:id/resetTraffic',
+        summary:
+          'Zero out upload + download counters for a single inbound. Does not touch per-client counters.',
+        params: [{ name: 'id', in: 'path', type: 'number', desc: 'Inbound ID.' }],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/inbounds/:id/delAllClients',
+        summary:
+          'Remove every client attached to a single inbound while keeping the inbound itself. Collects emails from settings.clients[] and feeds them into the optimized bulk-delete path (runtime user removal + traffic-row cleanup + SyncInbound). Destructive and cannot be undone.',
+        params: [{ name: 'id', in: 'path', type: 'number', desc: 'Inbound ID.' }],
+        response: '{\n  "success": true,\n  "obj": {\n    "deleted": 12\n  }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/inbounds/resetAllTraffics',
+        summary:
+          'Reset upload + download counters on every inbound. Destructive — accounting history is lost.',
+      },
+      // LUCX-HOOK: AWG obfuscation generator + host capture endpoint documentation.
+      {
+        method: 'POST',
+        path: '/panel/api/inbounds/awg/generateObfuscation',
+        summary:
+          'Generate AmneziaWG obfuscation parameters (Jc/Jmin/Jmax/S1-S4/H1-H4) and optionally CPS packets (I1-I5) for a given profile, region, and mimicry type. For awgVersion "3"/"3.1" on an AWG3-capable host also returns HeaderProtectionKey and the six AWG 3.0 device timer/padding ranges. RandomTrailers is never auto-enabled. LucX-UI only.',
+        params: [
+          {
+            name: 'obfProfile',
+            in: 'body',
+            type: 'string',
+            optional: true,
+            desc: 'Obfuscation preset: "lite", "standard", "pro", or "premium". Defaults to "standard".',
+          },
+          {
+            name: 'mimicryProfile',
+            in: 'body',
+            type: 'string',
+            optional: true,
+            desc: 'CPS mimicry type: "tls", "dns", "sip", or "quic". Defaults to "tls".',
+          },
+          {
+            name: 'browserProfile',
+            in: 'body',
+            type: 'string',
+            optional: true,
+            desc: 'CPS browser fingerprint: "chrome", "firefox", or "safari". Defaults to "chrome".',
+          },
+          {
+            name: 'region',
+            in: 'body',
+            type: 'string',
+            optional: true,
+            desc: 'Domain pool region: "ru" or "world". Defaults to "world".',
+          },
+          {
+            name: 'domain',
+            in: 'body',
+            type: 'string',
+            optional: true,
+            desc: 'Optional explicit domain for CPS capture. Empty picks a random host from the region pool.',
+          },
+          {
+            name: 'fullI1I5',
+            in: 'body',
+            type: 'boolean',
+            optional: true,
+            desc: 'When true, generate all five CPS packets; when false (the default), only I1.',
+          },
+          {
+            name: 'awgVersion',
+            in: 'body',
+            type: 'string',
+            optional: true,
+            desc: 'Target AmneziaWG version: "1.5", "2", "3", or "3.1". When "3" or "3.1" (and the target host supports AWG3) the response adds headerProtectionKey plus the six timer/padding ranges. RandomTrailers is never auto-enabled (must-match; current GUI clients drop the handshake).',
+          },
+          {
+            name: 'nodeId',
+            in: 'body',
+            type: 'number',
+            optional: true,
+            desc: 'Host the inbound will run on: a node ID = node-hosted, and the node judges its own AWG3 support. Null, omitted or <= 0 means this panel, whose own module support then gates the AWG3 block.',
+          },
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/inbounds/awg/captureHost',
+        summary:
+          'Capture real QUIC Initial packets from a remote host and extract I1-I5 CPS values for AmneziaWG mimicry. LucX-UI only.',
+        params: [
+          {
+            name: 'domain',
+            in: 'body',
+            type: 'string',
+            desc: 'Domain to probe (QUIC Initial with TLS SNI=domain). The only required field.',
+          },
+          {
+            name: 'awgVersion',
+            in: 'body',
+            type: 'string',
+            optional: true,
+            desc: 'Target AmneziaWG version. "3"/"3.1" on an AWG3-capable target host narrows the I1-I5 byte budget so a header-protection key still fits.',
+          },
+          {
+            name: 'nodeId',
+            in: 'body',
+            type: 'number',
+            optional: true,
+            desc: 'Host the inbound will run on, with the same meaning as on generateObfuscation: a node ID = node-hosted; null, omitted or <= 0 = this panel. Together with awgVersion it sets the I1-I5 budget.',
+          },
+        ],
+      },
+      // END LUCX-HOOK
+      // LUCX-HOOK: AWG runtime diagnostics endpoint documentation.
+      {
+        method: 'GET',
+        path: '/panel/api/inbounds/:id/awgDiagnostics',
+        summary:
+          'Probe the live kernel state of an AWG inbound (interface, ip_forward, peers/handshakes, plus MASQUERADE/FORWARD rules in kernel-nat mode or tunN/policy-rule/route-table chain in routeThroughXray mode). Read-only. LucX-UI only.',
+        params: [
+          { name: 'id', in: 'path', type: 'number', desc: 'Inbound ID. Must be an AWG inbound.' },
+        ],
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/inbounds/awg/import/preview',
+        summary:
+          'List unmanaged AmneziaWG interfaces on this host (awg-multi / toolza3 / Docker) for optional import. LucX-UI only.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/inbounds/awg/import/dismiss',
+        summary: 'Hide the existing-AWG import banner. LucX-UI only.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/inbounds/awg/import/commit',
+        summary:
+          'Import selected unmanaged AWG interfaces as inbounds and clients without rotating keys or IPs. LucX-UI only.',
+        params: [
+          {
+            name: 'ids',
+            in: 'body',
+            type: 'string',
+            desc: 'JSON array of candidate IDs from preview (source:ifname).',
+          },
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/inbounds/awg/import/delete',
+        summary:
+          'Stop and remove selected unmanaged AWG or tproxy installs from this host. Does not create or delete panel inbounds. LucX-UI only.',
+        params: [
+          {
+            name: 'ids',
+            in: 'body',
+            type: 'string',
+            desc: 'JSON array of candidate IDs from preview (source:ifname).',
+          },
+        ],
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/inbounds/:id/awgTestMtu',
+        summary:
+          "Binary-search the server's own outbound path MTU with DF (don't-fragment) pings against a fixed public anchor, and report whether the inbound's configured MTU fits under it with WireGuard/AWG overhead headroom. Ceiling check on the server uplink only — cannot see the client<->server path. Read-only. LucX-UI only.",
+        params: [
+          { name: 'id', in: 'path', type: 'number', desc: 'Inbound ID. Must be an AWG inbound.' },
+        ],
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "target": "1.1.1.1",\n    "pathMtu": 1500,\n    "reached": true,\n    "configuredMtu": 1420,\n    "fits": true,\n    "detail": "largest non-fragmented ping to 1.1.1.1 = 1500 bytes; configured MTU 1420 fits within the 80-byte WG/AWG overhead headroom"\n  }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/inbounds/gatewayEnsure',
+        summary:
+          'Create the SNI gateway inbound (port 443, disabled) if none exists. Idempotent. LucX-UI only.',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/inbounds/:id/gatewayPreview',
+        summary:
+          'Preview which inbounds an SNI gateway would move to loopback (listen/port/Hosts). Does not mutate. LucX-UI only.',
+        params: [
+          { name: 'id', in: 'path', type: 'number', desc: 'Gateway inbound ID.' },
+          {
+            name: 'publicHost',
+            in: 'query',
+            type: 'string',
+            desc: 'Public hostname for Hosts rows.',
+          },
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/inbounds/:id/gatewayApply',
+        summary:
+          'Apply selected preview rows: listen 127.0.0.1 off public 443, Hosts publicHost:443, Caddy L4 on NIC IPv4:443. Does not rewrite REALITY dest or serverNames. LucX-UI only.',
+        params: [
+          { name: 'id', in: 'path', type: 'number', desc: 'Gateway inbound ID.' },
+          {
+            name: 'selected',
+            in: 'body',
+            type: 'integer[]',
+            desc: 'Inbound IDs to move behind the SNI mux.',
+          },
+          {
+            name: 'steal',
+            in: 'body',
+            type: 'integer[]',
+            desc: 'Ignored. REALITY dest is not rewritten.',
+          },
+          {
+            name: 'inside',
+            in: 'body',
+            type: 'integer[]',
+            desc: 'WS/HTTPUpgrade inbound IDs to hide inside the selected Cover. Needs Cover in selected.',
+          },
+          {
+            name: 'paths',
+            in: 'body',
+            type: 'object',
+            desc: 'Optional path per inside inbound id. Empty or / is replaced with a random path.',
+          },
+          { name: 'publicHost', in: 'body', type: 'string', desc: 'Public hostname for Hosts.' },
+          {
+            name: 'ufw',
+            in: 'body',
+            type: 'boolean',
+            desc: 'If true, allow SSH/panel/80/443/public inbounds and default-deny the rest via UFW. Off by default.',
+          },
+          {
+            name: 'hidePanel',
+            in: 'body',
+            type: 'boolean',
+            desc: 'If true, reverse-proxy panel/sub paths on 443. Needs Cover or WEB proxy selected and a non-root webBasePath. Off by default.',
+          },
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/inbounds/:id/gatewayRevert',
+        summary:
+          'Stop the SNI mux and restore listen/port/Hosts from the Apply snapshot. LucX-UI only.',
+        params: [{ name: 'id', in: 'path', type: 'number', desc: 'Gateway inbound ID.' }],
+      },
+      // END LUCX-HOOK
+      {
+        method: 'POST',
+        path: '/panel/api/inbounds/import',
+        summary:
+          'Bulk-import an inbound from a JSON blob (e.g. one exported via the UI). The body uses form encoding with a single "data" field.',
+        params: [
+          {
+            name: 'data',
+            in: 'body (form)',
+            type: 'string',
+            desc: 'JSON-encoded inbound payload.',
+          },
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/inbounds/pushClientTraffics',
+        summary:
+          "Receive a master panel's aggregated per-client usage, keyed by the master's GUID. Stored in a side table used only for the UI display overlay and local quota enforcement — never folded into the local counters that masters poll, so delta accounting stays intact. Called panel-to-panel by the node traffic sync job.",
+        params: [
+          {
+            name: 'masterGuid',
+            in: 'body (json)',
+            type: 'string',
+            desc: 'Stable GUID of the pushing master panel.',
+          },
+          {
+            name: 'traffics',
+            in: 'body (json)',
+            type: 'object[]',
+            desc: 'Client traffic rows; only email/up/down are read.',
+          },
+        ],
+        body: '{\n  "masterGuid": "9f6c2d-…",\n  "traffics": [\n    { "email": "alice", "up": 1048576, "down": 2097152 }\n  ]\n}',
+        response: '{\n  "success": true\n}',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/inbounds/:id/fallbacks',
+        summary:
+          "List the fallback rules attached to a master VLESS/Trojan TCP-TLS inbound. Each rule links one child inbound (the dest) to optional SNI/ALPN/path/dest/xver match criteria. When dest is empty the child inbound's listen+port is used.",
+        params: [{ name: 'id', in: 'path', type: 'number', desc: 'Master inbound ID.' }],
+        response:
+          '{\n  "success": true,\n  "obj": [\n    {\n      "id": 1,\n      "masterId": 10,\n      "childId": 11,\n      "name": "",\n      "alpn": "",\n      "path": "/vlws",\n      "dest": "",\n      "xver": 2,\n      "sortOrder": 0\n    }\n  ]\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/inbounds/:id/fallbacks',
+        summary:
+          'Replace the entire fallback list for a master inbound. Body is JSON. Triggers an Xray restart.',
+        params: [
+          { name: 'id', in: 'path', type: 'number', desc: 'Master inbound ID.' },
+          {
+            name: 'fallbacks',
+            in: 'body (json)',
+            type: 'object[]',
+            desc: 'Array of {childId, name, alpn, path, dest, xver, sortOrder} entries. Leave dest empty to auto-resolve from the child inbound\'s listen+port; set it (e.g. "8443", "127.0.0.1:8443", "/dev/shm/x.sock") to override.',
+          },
+        ],
+        body: '{\n  "fallbacks": [\n    { "childId": 11, "path": "/vlws", "xver": 2 },\n    { "childId": 12, "alpn": "h2", "dest": "8443" }\n  ]\n}',
+        response: '{\n  "success": true,\n  "msg": "Inbound updated"\n}',
+      },
+    ],
+  },
+
+  // LUCX-HOOK: AWG outbound (client-mode AmneziaWG) API documentation. Kept as
+  // a self-contained section rather than entries spliced into the Inbounds
+  // group, so upstream edits to neighbouring groups never collide with ours.
+  // Routes are registered in internal/web/controller/api.go and served by
+  // internal/web/controller/awg_outbound.go.
+  {
+    id: 'awg-outbounds',
+    title: 'AWG Outbounds',
+    description:
+      'Manage client-mode AmneziaWG outbounds — connections from this panel out to an upstream AmneziaWG server (the mirror image of an AWG inbound, which accepts clients). Each row owns a kernel interface named awgo-{id}: the reconcile job converges it with the DB row every 10 seconds, and a freedom outbound bound to that interface via sockopt.interface is injected into the generated Xray config, so routing rules and balancers can send traffic through the upstream VPN. Every mutating endpoint force-restarts Xray rather than hot-applying, because a hot-applied config silently kept stale sockopt-bound outbounds in live testing — and an outbound pointing at a missing interface falls back to the default route, bypassing the VPN. All endpoints live under /panel/api/awg-outbounds and require a logged-in session or Bearer token. LucX-UI only.',
+    endpoints: [
+      {
+        method: 'GET',
+        path: '/panel/api/awg-outbounds/list',
+        summary:
+          'List every AWG outbound row, each augmented with a human-readable status string derived from the live kernel interface: "up; handshake <duration> ago; rx=N tx=N" when the interface is up, "down (fallback to default route active — WARNING)" when it is enabled but has no handshake (traffic is bypassing the VPN), or "disabled" when the row is switched off. LucX-UI only.',
+        response:
+          '{\n  "success": true,\n  "obj": [\n    {\n      "id": 1,\n      "tag": "awgo-upstream",\n      "remark": "Amnezia NL",\n      "enable": true,\n      "settings": "{\\"privateKey\\":\\"…\\",\\"address\\":\\"10.9.0.5/32\\",\\"endpoint\\":\\"vpn.example.com:51820\\"}",\n      "created_at": 1753000000,\n      "updated_at": 1753000000,\n      "status": "up; handshake 12s ago; rx=1048576 tx=524288"\n    }\n  ]\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/awg-outbounds/add',
+        summary:
+          'Create an AWG outbound row. Tag is optional — when omitted the server assigns "awgo-{id}" after the row is inserted; when supplied it must not collide with an existing outbound tag or an outbound tag already present in the Xray template. Settings is optional too: an empty value is replaced with a generated default (fresh keypair, MTU 1320, allowedIPs 0.0.0.0/0, ::/0). The kernel interface itself is brought up by the reconcile job, not by this call. Returns the created row. LucX-UI only.',
+        params: [
+          {
+            name: 'tag',
+            in: 'body (json)',
+            type: 'string',
+            desc: 'Xray outbound tag. Leave empty to auto-assign "awgo-{id}".',
+            optional: true,
+          },
+          {
+            name: 'remark',
+            in: 'body (json)',
+            type: 'string',
+            desc: 'Free-form label shown in the UI.',
+            optional: true,
+          },
+          {
+            name: 'enable',
+            in: 'body (json)',
+            type: 'boolean',
+            desc: 'Whether the reconcile job should bring the interface up. Defaults to true.',
+            optional: true,
+          },
+          {
+            name: 'settings',
+            in: 'body (json)',
+            type: 'string',
+            desc: 'JSON-encoded string (not an object) holding the connection: privateKey, address (mandatory tunnel IP, e.g. "10.9.0.5/32"), publicKey (upstream), psk, endpoint ("host:port"), mtu, keepalive, allowedIPs, dns, plus obfuscation jc/jmin/jmax, s1-s4, h1-h4, i1-i5 and headerProtectionKey. Leave empty for generated defaults.',
+            optional: true,
+          },
+        ],
+        body: '{\n  "tag": "awgo-upstream",\n  "remark": "Amnezia NL",\n  "enable": true,\n  "settings": "{\\"privateKey\\":\\"…\\",\\"address\\":\\"10.9.0.5/32\\",\\"publicKey\\":\\"…\\",\\"endpoint\\":\\"vpn.example.com:51820\\",\\"mtu\\":1320,\\"allowedIPs\\":\\"0.0.0.0/0, ::/0\\"}"\n}',
+        errorResponse: '{\n  "success": false,\n  "msg": "awg-outbound: add failed"\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/awg-outbounds/update/:id',
+        summary:
+          'Overwrite an AWG outbound row. The path id wins over any id in the body. Tag uniqueness is re-checked, excluding this row. Settings changes (endpoint, keys, MTU, obfuscation) take effect on the kernel interface at the next reconcile tick. LucX-UI only.',
+        params: [
+          { name: 'id', in: 'path', type: 'number', desc: 'AWG outbound ID.' },
+          {
+            name: 'tag',
+            in: 'body (json)',
+            type: 'string',
+            desc: 'Xray outbound tag. Must stay unique across outbounds and the Xray template.',
+          },
+          {
+            name: 'remark',
+            in: 'body (json)',
+            type: 'string',
+            desc: 'Free-form label shown in the UI.',
+            optional: true,
+          },
+          {
+            name: 'enable',
+            in: 'body (json)',
+            type: 'boolean',
+            desc: 'Whether the reconcile job should bring the interface up.',
+            optional: true,
+          },
+          {
+            name: 'settings',
+            in: 'body (json)',
+            type: 'string',
+            desc: 'JSON-encoded settings string — same shape as on add.',
+            optional: true,
+          },
+        ],
+        errorResponse: '{\n  "success": false,\n  "msg": "awg-outbound: update failed"\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/awg-outbounds/del/:id',
+        summary:
+          'Delete an AWG outbound row and tear down its awgo-{id} kernel interface immediately, without waiting for the next reconcile tick, so a removed outbound stops carrying traffic right away. The matching freedom outbound is dropped from the Xray config by the forced restart. Destructive and cannot be undone. LucX-UI only.',
+        params: [{ name: 'id', in: 'path', type: 'number', desc: 'AWG outbound ID.' }],
+        errorResponse: '{\n  "success": false,\n  "msg": "awg-outbound: del failed"\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/awg-outbounds/enable/:id',
+        summary:
+          'Toggle only the enable flag without serialising the whole settings JSON — the counterpart of the inbound enable switch. The reconcile job is what actually brings the kernel interface up or down in response. A missing or unparsable body is treated as {"enable": false}. LucX-UI only.',
+        params: [
+          { name: 'id', in: 'path', type: 'number', desc: 'AWG outbound ID.' },
+          {
+            name: 'enable',
+            in: 'body (json)',
+            type: 'boolean',
+            desc: 'Target state. Absent or invalid body means false.',
+          },
+        ],
+        body: '{\n  "enable": false\n}',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/awg-outbounds/status/:id',
+        summary:
+          'Read the live kernel state of one AWG outbound from a single "awg show dump" call. Read-only. When up is false the interface is missing or has never completed a handshake, rx/tx are zero, and the outbound must be treated as down — its traffic is bypassing the VPN via the default route. LucX-UI only.',
+        params: [{ name: 'id', in: 'path', type: 'number', desc: 'AWG outbound ID.' }],
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "up": true,\n    "handshakeAge": "12s",\n    "rx": 1048576,\n    "tx": 524288,\n    "ifname": "awgo-1"\n  }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/awg-outbounds/test/:id',
+        summary:
+          'Prove the tunnel actually carries traffic by pinging a public target bound to the awgo-{id} interface (ping -I) — a completed handshake is necessary but not sufficient. Sends three probes to 1.1.1.1, or ping6 to 2606:4700:4700::1111 when the row is IPv6. A down interface short-circuits with an explicit warning instead of an opaque ping error. Note that a reachable upstream can still report failure when it does not route the probe target back, which is an upstream-side NAT/AllowedIPs issue, not a panel one. LucX-UI only.',
+        params: [{ name: 'id', in: 'path', type: 'number', desc: 'AWG outbound ID.' }],
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "ok": true,\n    "latency_ms": 14,\n    "raw": "3 packets transmitted, 3 received…"\n  }\n}',
+        errorResponse:
+          '{\n  "success": false,\n  "msg": "interface awgo-1 is down — traffic bypasses VPN"\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/awg-outbounds/parseConf',
+        summary:
+          'Parse a pasted awg-quick .conf and return it as a settings object so the "Paste .conf" UI drawer can autofill the form. Reads the [Interface] and [Peer] sections, tolerates comments, blank lines and valueless keys, and does not validate that mandatory fields are present — the caller fills the gaps before saving. Stateless: nothing is written to the database. LucX-UI only.',
+        params: [
+          { name: 'conf', in: 'body (json)', type: 'string', desc: 'Raw awg-quick .conf text.' },
+        ],
+        body: '{\n  "conf": "[Interface]\\nPrivateKey = …\\nAddress = 10.9.0.5/32\\nMTU = 1320\\nJc = 4\\n\\n[Peer]\\nPublicKey = …\\nEndpoint = vpn.example.com:51820\\nAllowedIPs = 0.0.0.0/0, ::/0"\n}',
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "privateKey": "…",\n    "address": "10.9.0.5/32",\n    "mtu": 1320,\n    "publicKey": "…",\n    "psk": "",\n    "endpoint": "vpn.example.com:51820",\n    "keepalive": 25,\n    "allowedIPs": "0.0.0.0/0, ::/0",\n    "dns": "",\n    "jc": 4\n  }\n}',
+        errorResponse: '{\n  "success": false,\n  "msg": "awg-outbound: parse failed"\n}',
+      },
+    ],
+  },
+  {
+    id: 'sidecar-outbounds',
+    title: 'Sidecar Outbounds',
+    description:
+      'Client-mode NaiveProxy, mieru and TrustTunnel outbounds. Each row runs a userspace client that listens SOCKS on loopback; a socks outbound with the row tag is injected into the generated Xray config so routing and balancers can send traffic through the upstream. Naive client is upload-only (not in the tarball). Mutating endpoints force-restart Xray. LucX-UI only.',
+    endpoints: [
+      {
+        method: 'GET',
+        path: '/panel/api/sidecar-outbounds/list',
+        summary:
+          'List sidecar outbound rows with live SOCKS status and binaryExists. LucX-UI only.',
+        response:
+          '{\n  "success": true,\n  "obj": [\n    {\n      "id": 1,\n      "protocol": "mieru",\n      "tag": "mieruout-1",\n      "enable": true,\n      "settings": "{\\"socksPort\\":39222,\\"host\\":\\"1.2.3.4\\",\\"user\\":\\"a\\"}",\n      "status": "up",\n      "binaryExists": true\n    }\n  ]\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/sidecar-outbounds/add',
+        summary:
+          'Create a sidecar outbound. Protocol is naive|mieru|trusttunnel. Empty tag becomes {protocol}out-{id}. socksPort is allocated if missing. LucX-UI only.',
+        body: '{\n  "protocol": "naive",\n  "tag": "nv-up",\n  "enable": true,\n  "settings": "{\\"host\\":\\"n.example.org\\",\\"port\\":443,\\"user\\":\\"alice\\",\\"pass\\":\\"s3cret\\"}"\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/sidecar-outbounds/update/:id',
+        summary: 'Overwrite a sidecar outbound. socksPort is kept stable. LucX-UI only.',
+        params: [{ name: 'id', in: 'path', type: 'number', desc: 'Sidecar outbound ID.' }],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/sidecar-outbounds/del/:id',
+        summary: 'Delete a sidecar outbound and stop its client process immediately. LucX-UI only.',
+        params: [{ name: 'id', in: 'path', type: 'number', desc: 'Sidecar outbound ID.' }],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/sidecar-outbounds/enable/:id',
+        summary: 'Toggle enable. LucX-UI only.',
+        params: [{ name: 'id', in: 'path', type: 'number', desc: 'Sidecar outbound ID.' }],
+        body: '{\n  "enable": false\n}',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/sidecar-outbounds/status/:id',
+        summary: 'Live SOCKS listen state. LucX-UI only.',
+        params: [{ name: 'id', in: 'path', type: 'number', desc: 'Sidecar outbound ID.' }],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/sidecar-outbounds/test/:id',
+        summary: 'TCP probe of the local SOCKS port. LucX-UI only.',
+        params: [{ name: 'id', in: 'path', type: 'number', desc: 'Sidecar outbound ID.' }],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/sidecar-outbounds/parseLink',
+        summary: 'Parse naive+https://, mierus:// or Throne tt:// into settings. LucX-UI only.',
+        body: '{\n  "link": "naive+https://alice:s3cret@n.example.org:8443"\n}',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/sidecar-outbounds/binaries',
+        summary: 'Client binary presence for naive/mieru/trusttunnel. LucX-UI only.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/sidecar-outbounds/upload/:protocol',
+        summary:
+          'Upload a client binary (naive-client, mieru-client, trusttunnel-client). LucX-UI only.',
+        params: [
+          { name: 'protocol', in: 'path', type: 'string', desc: 'naive | mieru | trusttunnel' },
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/sidecar-outbounds/deleteBinary/:protocol',
+        summary: 'Delete a client binary. LucX-UI only.',
+        params: [
+          { name: 'protocol', in: 'path', type: 'string', desc: 'naive | mieru | trusttunnel' },
+        ],
+      },
+    ],
+  },
+  // END LUCX-HOOK
+
+  // LUCX-HOOK: LucX capability probe for multi-node deploy gating.
+  {
+    id: 'lucx',
+    title: 'LucX',
+    description:
+      'LucX-UI identity and capability surface. Masters probe remote nodes with GET /panel/api/lucx/hello to learn whether the node is a LucX fork (and which sidecar protocols it supports) before offering AWG/tunnel inbound deploy. Vanilla 3x-ui returns 404. LucX-UI only.',
+    endpoints: [
+      {
+        method: 'GET',
+        path: '/panel/api/lucx/hello',
+        summary:
+          "Return this panel's LucX identity: panel version, supported feature tags (awg, mtproto, naive, olcrtc, qwdtt, cluster), AWG tools version, and whether the AmneziaWG kernel module is loaded / AWG3-capable. Used by a master panel during node heartbeat to gate LucX-only inbound deploy. Requires session or Bearer token.",
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "version": "3.6.0-lucx.114",\n    "features": ["awg", "mtproto", "naive", "olcrtc", "qwdtt", "cluster"],\n    "awgVersion": "v3.0.20260730",\n    "mtprotoVersion": "",\n    "moduleLoaded": true,\n    "moduleAwg3": true,\n    "moduleAwg31": true\n  }\n}',
+      },
+    ],
+  },
+  // END LUCX-HOOK
+
+  // LUCX-HOOK: tunnel sidecars (NaiveProxy, olcRTC) API documentation.
+  // Self-contained section, same reasoning as awg-outbounds above. Routes
+  // are registered in internal/web/controller/api.go and served by
+  // internal/web/controller/tunnel.go.
+  {
+    id: 'tunnels',
+    title: 'Tunnel tools',
+    description:
+      'Manage external tunnel-server sidecars that run next to the Xray core. Cores: (1) NaiveProxy — Caddy with forward_proxy (klzgrad, HTTP/2 padding), optional routeThroughXray SOCKS bridge; (2) olcRTC — TCP-over-WebRTC via meet rooms (Jitsi/Telemost/WB Stream), YAML config, olcrtc:// connect URI; (3) qWDTT — WireGuard over VK TURN (SpaceNeuroX wdtt-server), CLI flags, qwdtt:// URI + subscription JSON. Each core is supervised (start/stop/restart, ring logs, binary upload/download); the reconcile job (every 10s) revives a crashed core. All endpoints live under /panel/api/tunnel and require a logged-in session or Bearer token. LucX-UI only.',
+    endpoints: [
+      {
+        method: 'GET',
+        path: '/panel/api/tunnel/naive/status',
+        summary:
+          'Full status of the NaiveProxy core: the live three-level probe (running/listening/responding), binary presence and path, the stored config, the generated naive+https client URL and the last process log line. LucX-UI only.',
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "core": "naive",\n    "displayName": "NaiveProxy",\n    "binaryExists": true,\n    "binaryPath": "bin/caddy-naive-linux-amd64",\n    "clientUrl": "naive+https://alice:secret@vpn.example.com",\n    "config": { "port": 443, "domain": "vpn.example.com", "enabled": true },\n    "probe": { "running": true, "listening": true, "responding": true },\n    "lastLog": ""\n  }\n}',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/tunnel/naive/config',
+        summary:
+          'Read the stored NaiveProxy config (defaults when nothing is stored yet). LucX-UI only.',
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "remark": "",\n    "enabled": false,\n    "listen": "",\n    "port": 443,\n    "domain": "",\n    "useAcme": false,\n    "acmeEmail": "",\n    "certFile": "",\n    "keyFile": "",\n    "authUser": "",\n    "authPass": "",\n    "enableH3": true,\n    "probeResistance": true,\n    "logLevel": "WARN",\n    "extraArgs": "",\n    "useRawConfig": false,\n    "rawConfig": ""\n  }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/naive/config',
+        summary:
+          'Validate, persist and apply the NaiveProxy config. Validation covers port range, credentials, TLS mode requirements (Auto TLS needs a domain and port 443; manual TLS needs cert/key paths) and the log level; a non-raw config is also cross-checked against TCP Xray inbounds for port collisions. A running core whose rendered Caddyfile changed is restarted. Returns the fresh status. LucX-UI only.',
+        body: '{\n  "enabled": true,\n  "port": 443,\n  "domain": "vpn.example.com",\n  "useAcme": true,\n  "acmeEmail": "admin@example.com",\n  "authUser": "alice",\n  "authPass": "secret",\n  "enableH3": true,\n  "probeResistance": true,\n  "logLevel": "WARN"\n}',
+        errorResponse: '{\n  "success": false,\n  "msg": "naive: Auto TLS requires a domain"\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/naive/start',
+        summary: 'Mark the core enabled, persist, and start the caddy process. LucX-UI only.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/naive/stop',
+        summary:
+          'Mark the core disabled, persist, and stop the caddy process (SIGTERM with kill fallback). LucX-UI only.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/naive/restart',
+        summary: 'Force a fresh start with the stored config (and enable the core). LucX-UI only.',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/tunnel/naive/logs',
+        summary:
+          'Return the most recent captured output lines of the caddy process (ring buffer, default 200). LucX-UI only.',
+        params: [
+          {
+            name: 'lines',
+            in: 'query',
+            type: 'number',
+            desc: 'Max lines to return (default 200).',
+            optional: true,
+          },
+        ],
+        response: '{\n  "success": true,\n  "obj": ["…"]\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/naive/preview',
+        summary:
+          'Render the Caddyfile the given form state would produce, without persisting anything. Same validation as save. LucX-UI only.',
+        body: '{\n  "port": 443,\n  "domain": "vpn.example.com",\n  "authUser": "alice",\n  "authPass": "secret"\n}',
+        response: '{\n  "success": true,\n  "obj": { "caddyfile": "{\\n\\tadmin off\\n…}\\n" }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/naive/validate',
+        summary:
+          'Run "caddy adapt" against raw Caddyfile text using the installed core binary; the parser output is returned on failure. Requires the binary to be installed. LucX-UI only.',
+        body: '{\n  "text": ":443 {\\n\\trespond \\"ok\\"\\n}\\n"\n}',
+        response: '{\n  "success": true,\n  "obj": { "valid": true }\n}',
+        errorResponse: '{\n  "success": false,\n  "msg": "tunnel: caddy adapt: …"\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/naive/upload',
+        summary:
+          'Replace the core binary on disk (multipart field "file"). Exempt from the global 10 MiB body limit because caddy builds are ~50 MB. LucX-UI only.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/naive/download',
+        summary:
+          'Fetch the core binary from a URL into a temp file and swap it into place (an interrupted download never leaves a half-written binary). https only, to a public host; redirects are bounded and re-checked, so the panel cannot be walked onto loopback, the LAN or a metadata endpoint. 200 MB cap. Pass the optional sha256 to have the download discarded on digest mismatch instead of replacing a working binary. LucX-UI only.',
+        body: '{\n  "url": "https://example.com/caddy-naive-linux-amd64",\n  "sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/naive/deleteBinary',
+        summary: 'Stop the core and remove its binary from disk. LucX-UI only.',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/tunnel/olcrtc/status',
+        summary:
+          'Full status of the olcRTC core: process probe, binary presence, stored config and the generated olcrtc:// connect URI. LucX-UI only.',
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "core": "olcrtc",\n    "displayName": "olcRTC",\n    "binaryExists": true,\n    "binaryPath": "bin/olcrtc-linux-amd64",\n    "clientUri": "olcrtc://jitsi?datachannel@https://meet.example.org/r#…",\n    "config": { "provider": "jitsi", "transport": "datachannel", "enabled": true },\n    "probe": { "running": true, "listening": false, "responding": false },\n    "lastLog": ""\n  }\n}',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/tunnel/olcrtc/config',
+        summary:
+          'Read the stored olcRTC config (defaults when nothing is stored yet). LucX-UI only.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/olcrtc/config',
+        summary:
+          'Validate, persist and apply the olcRTC config. Auto-generates a 64-hex crypto key when empty. Renders server YAML and restarts the process on fingerprint change. Returns the fresh status. LucX-UI only.',
+        body: '{\n  "enabled": true,\n  "provider": "jitsi",\n  "roomId": "https://meet.example.org/myroom",\n  "transport": "datachannel",\n  "dns": "8.8.8.8:53"\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/olcrtc/start',
+        summary: 'Mark the core enabled, persist, and start olcrtc. LucX-UI only.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/olcrtc/stop',
+        summary: 'Mark the core disabled, persist, and stop olcrtc. LucX-UI only.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/olcrtc/restart',
+        summary: 'Force a fresh start with the stored config. LucX-UI only.',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/tunnel/olcrtc/logs',
+        summary: 'Recent process log lines (ring buffer, default 200). LucX-UI only.',
+        params: [
+          {
+            name: 'lines',
+            in: 'query',
+            type: 'number',
+            desc: 'Max lines to return (default 200).',
+            optional: true,
+          },
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/olcrtc/preview',
+        summary:
+          'Render the server YAML the given form state would produce, without persisting. LucX-UI only.',
+        response: '{\n  "success": true,\n  "obj": { "yaml": "mode: srv\\n…" }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/olcrtc/upload',
+        summary:
+          'Replace the olcrtc binary on disk (multipart field "file"). Body-limit exempt. LucX-UI only.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/olcrtc/download',
+        summary:
+          'Fetch the olcrtc binary from a URL into place. https only, to a public host; redirects are bounded and re-checked, so the panel cannot be walked onto loopback, the LAN or a metadata endpoint. 200 MB cap. Pass the optional sha256 to have the download discarded on digest mismatch instead of replacing a working binary. LucX-UI only.',
+        body: '{\n  "url": "https://example.com/olcrtc-linux-amd64",\n  "sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/olcrtc/deleteBinary',
+        summary: 'Stop the core and remove its binary from disk. LucX-UI only.',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/tunnel/qwdtt/status',
+        summary:
+          'Full status of the qWDTT core: process probe, binary presence, stored config, qwdtt:// / wdtt:// URIs and subscription JSON. LucX-UI only.',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/tunnel/qwdtt/config',
+        summary:
+          'Read the stored qWDTT config (defaults when nothing is stored yet). LucX-UI only.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/qwdtt/config',
+        summary:
+          'Validate, persist and apply the qWDTT config. Auto-generates the main password when empty. Restarts the process on argv fingerprint change. Returns the fresh status. LucX-UI only.',
+        body: '{\n  "enabled": true,\n  "listenAddr": "0.0.0.0:56000",\n  "wgPort": 56001,\n  "dns": "8.8.8.8",\n  "subHost": "203.0.113.10:56000",\n  "vkHashes": "hash1"\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/qwdtt/start',
+        summary:
+          'Mark the core enabled, persist, and start wdtt-server. Requires root/CAP_NET_ADMIN. LucX-UI only.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/qwdtt/stop',
+        summary: 'Mark the core disabled, persist, and stop wdtt-server. LucX-UI only.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/qwdtt/restart',
+        summary: 'Force a fresh start with the stored config. LucX-UI only.',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/tunnel/qwdtt/logs',
+        summary: 'Recent process log lines (ring buffer, default 200). LucX-UI only.',
+        params: [
+          {
+            name: 'lines',
+            in: 'query',
+            type: 'number',
+            desc: 'Max lines to return (default 200).',
+            optional: true,
+          },
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/qwdtt/upload',
+        summary:
+          'Replace the qwdtt binary on disk (multipart field "file"). Body-limit exempt. LucX-UI only.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/qwdtt/download',
+        summary:
+          'Fetch the qwdtt binary from a URL into place. https only, to a public host; redirects are bounded and re-checked, so the panel cannot be walked onto loopback, the LAN or a metadata endpoint. 200 MB cap. Pass the optional sha256 to have the download discarded on digest mismatch instead of replacing a working binary. LucX-UI only.',
+        body: '{\n  "url": "https://example.com/qwdtt-linux-amd64",\n  "sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/qwdtt/deleteBinary',
+        summary: 'Stop the core and remove its binary from disk. LucX-UI only.',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/tunnel/csqtt/status',
+        summary:
+          'CSQTT core status for the Cores page: binary presence and process state. Inbound-only. LucX-UI only.',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/tunnel/csqtt/logs',
+        summary: 'Recent log lines of the CSQTT process (ring buffer, default 200). LucX-UI only.',
+        params: [
+          {
+            name: 'lines',
+            in: 'query',
+            type: 'number',
+            desc: 'Max lines to return (default 200).',
+            optional: true,
+          },
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/csqtt/upload',
+        summary:
+          'Replace the csqtt binary on disk (multipart field "file"). Body-limit exempt. LucX-UI only.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/csqtt/download',
+        summary:
+          'Fetch the csqtt binary from a URL into place. https only, to a public host; redirects are bounded and re-checked. 200 MB cap. Optional sha256. LucX-UI only.',
+        body: '{\n  "url": "https://example.com/csqtt-linux-amd64",\n  "sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/csqtt/deleteBinary',
+        summary: 'Stop the CSQTT core and remove its binary from disk. LucX-UI only.',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/tunnel/openflux/status',
+        summary: 'OpenFlux core status for the Cores page. Inbound-only. LucX-UI only.',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/tunnel/openflux/logs',
+        summary: 'Recent log lines of OpenFlux processes. LucX-UI only.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/openflux/upload',
+        summary: 'Replace the openflux binary on disk (multipart field "file"). LucX-UI only.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/openflux/download',
+        summary: 'Fetch the openflux binary from an https URL. LucX-UI only.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/openflux/deleteBinary',
+        summary: 'Stop OpenFlux processes and remove the binary. LucX-UI only.',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/tunnel/mieru/status',
+        summary:
+          'mieru core status for the Cores page: binary presence and aggregate process state across all mieru-{id} inbound sidecars. Inbound-only core — no legacy config/lifecycle. LucX-UI only.',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/tunnel/mieru/logs',
+        summary:
+          'Recent log lines of all mieru instances (ring buffer, tagged per key, default 200). LucX-UI only.',
+        params: [
+          {
+            name: 'lines',
+            in: 'query',
+            type: 'number',
+            desc: 'Max lines to return (default 200).',
+            optional: true,
+          },
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/mieru/upload',
+        summary:
+          'Replace the mita binary on disk (multipart field "file"). Body-limit exempt. LucX-UI only.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/mieru/download',
+        summary:
+          'Fetch the mita binary from a URL into place. https only, to a public host; redirects are bounded and re-checked, so the panel cannot be walked onto loopback, the LAN or a metadata endpoint. 200 MB cap. Pass the optional sha256 to have the download discarded on digest mismatch instead of replacing a working binary. LucX-UI only.',
+        body: '{\n  "url": "https://example.com/mieru-linux-amd64",\n  "sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/mieru/deleteBinary',
+        summary: 'Stop every mieru instance and remove the binary from disk. LucX-UI only.',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/tunnel/trusttunnel/status',
+        summary:
+          'TrustTunnel core status for the Cores page: binary presence and aggregate process state across all trusttunnel-{id} inbound sidecars. Inbound-only core. LucX-UI only.',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/tunnel/trusttunnel/logs',
+        summary:
+          'Recent log lines of all TrustTunnel instances (ring buffer, tagged per key, default 200). LucX-UI only.',
+        params: [
+          {
+            name: 'lines',
+            in: 'query',
+            type: 'number',
+            desc: 'Max lines to return (default 200).',
+            optional: true,
+          },
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/trusttunnel/upload',
+        summary:
+          'Replace the trusttunnel_endpoint binary on disk (multipart field "file"). Body-limit exempt. LucX-UI only.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/trusttunnel/download',
+        summary:
+          'Fetch the trusttunnel_endpoint binary from a URL into place. https only, to a public host; redirects are bounded and re-checked, so the panel cannot be walked onto loopback, the LAN or a metadata endpoint. 200 MB cap. Pass the optional sha256 to have the download discarded on digest mismatch instead of replacing a working binary. LucX-UI only.',
+        body: '{\n  "url": "https://example.com/trusttunnel-linux-amd64",\n  "sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/trusttunnel/deleteBinary',
+        summary: 'Stop every TrustTunnel instance and remove the binary from disk. LucX-UI only.',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/tunnel/anytls/status',
+        summary:
+          'AnyTLS core status for the Cores page: binary presence and aggregate process state across all anytls-{id} inbound sidecars. Inbound-only core. LucX-UI only.',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/tunnel/anytls/logs',
+        summary:
+          'Recent log lines of all AnyTLS instances (ring buffer, tagged per key, default 200). LucX-UI only.',
+        params: [
+          {
+            name: 'lines',
+            in: 'query',
+            type: 'number',
+            desc: 'Max lines to return (default 200).',
+            optional: true,
+          },
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/anytls/upload',
+        summary:
+          'Replace the anytls-server binary on disk (multipart field "file"). Body-limit exempt. LucX-UI only.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/anytls/download',
+        summary:
+          'Fetch the anytls-server binary from a URL into place. https only, to a public host; redirects are bounded and re-checked, so the panel cannot be walked onto loopback, the LAN or a metadata endpoint. 200 MB cap. Pass the optional sha256 to have the download discarded on digest mismatch instead of replacing a working binary. LucX-UI only.',
+        body: '{\n  "url": "https://example.com/anytls-linux-amd64",\n  "sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/anytls/deleteBinary',
+        summary: 'Stop every AnyTLS instance and remove the binary from disk. LucX-UI only.',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/tunnel/tproxy/status',
+        summary:
+          'Telegram WEB proxy core status for the Cores page: tproxy-server binary and process state. LucX-UI only.',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/tunnel/tproxy/logs',
+        summary: 'Recent tproxy-server log lines. LucX-UI only.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/tproxy/upload',
+        summary: 'Replace the tproxy-server binary. LucX-UI only.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/tproxy/download',
+        summary: 'Fetch tproxy-server from a URL. LucX-UI only.',
+        body: '{\n  "url": "https://example.com/tproxy-linux-amd64",\n  "sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/tproxy/deleteBinary',
+        summary: 'Stop tproxy instances and remove the binary. LucX-UI only.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/tproxy/uploadSite',
+        summary:
+          'Upload a camouflage-site zip for one tproxy or cover inbound (query id). Needs index.html. LucX-UI only.',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/tunnel/tproxy/site',
+        summary:
+          'List camouflage-site files on disk for one tproxy or cover inbound (query id). LucX-UI only.',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/tunnel/mtproxy/status',
+        summary: 'Official MTProxy binary status for Telegram WEB proxy backends. LucX-UI only.',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/tunnel/mtproxy/logs',
+        summary: 'Recent official MTProxy log lines. LucX-UI only.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/mtproxy/upload',
+        summary: 'Replace the official MTProxy binary. LucX-UI only.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/mtproxy/download',
+        summary: 'Fetch official MTProxy from a URL. LucX-UI only.',
+        body: '{\n  "url": "https://example.com/mtproxy-linux-amd64",\n  "sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/tunnel/mtproxy/deleteBinary',
+        summary: 'Stop MTProxy instances and remove the binary. LucX-UI only.',
+      },
+    ],
+  },
+  // END LUCX-HOOK
+
+  // LUCX-HOOK: plugin system API documentation (internal/web/controller/plugins.go).
+  {
+    id: 'plugins',
+    title: 'Plugins',
+    description:
+      'Install plugins from GitHub links, review the permissions they request, then enable, disable or remove them. Installing is two steps: preview (download, unpack, validate — nothing is installed) and install (the caller must send back exactly the permissions of the previewed manifest). Plugin code is never executed in this release. XUI_PLUGINS_DISABLED=1 turns the whole system off; every call then fails with a message naming the switch. All endpoints live under /panel/api/plugins. LucX-UI only.',
+    endpoints: [
+      {
+        method: 'GET',
+        path: '/panel/api/plugins/list',
+        summary:
+          'Installed plugins plus the state of the plugin system: available, safeMode, the reason it is unavailable, whether a master panel may manage plugins on this node (allowMasterManagement), whether plugin processes can run on this system (processesAvailable / processesError), what the process runner enforces there (processesIsolation: runner, level strong/partial/none, and whether the network, files and a per-plugin user are enforced; absent when processes cannot run) and the archive mirror in effect. Every plugin has a runtime object (state, healthy, pid, restarts) when it is a process plugin, and disabledReason when the panel switched it off, for example after a crash loop. LucX-UI only.',
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "available": true,\n    "processesAvailable": true,\n    "processesError": "",\n    "processesIsolation": { "runner": "systemd", "level": "strong", "network": true, "filesystem": true, "user": true },\n    "safeMode": false,\n    "error": "",\n    "archiveBase": "https://codeload.github.com",\n    "customArchiveBase": "",\n    "defaultArchiveBase": "https://codeload.github.com",\n    "plugins": [\n      {\n        "id": "traffic-alerts",\n        "name": "Traffic Alerts",\n        "version": "1.2.0",\n        "type": "process",\n        "scope": "master",\n        "source": { "owner": "acme", "repo": "alerts" },\n        "commit": "0123456789abcdef0123456789abcdef01234567",\n        "enabled": true,\n        "installedAt": "2026-10-18T12:00:00Z",\n        "permissions": ["api:clients:read"],\n        "runtime": { "state": "running", "healthy": true, "pid": 4242, "restarts": 0 }\n      }\n    ]\n  }\n}',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/plugins/menu',
+        summary:
+          'What enabled plugins that run on this panel add to the interface: sidebar entries (menu) and built-in pages they stand in for (replaces, keyed by route; only /, /inbounds, /clients, /groups, /nodes and /hosts can be replaced and one plugin holds a page). Each path is relative to /panel/api/plugins/x/<pluginId>. Empty when plugins are off, and a disabled or removed plugin disappears at once. Master panels (node-sync) cannot call it. LucX-UI only.',
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "menu": [\n      { "pluginId": "ui-hello", "pluginName": "UI Hello", "title": "Hello", "icon": "bell", "path": "/ui/index.html" }\n    ],\n    "replaces": {\n      "/clients": { "pluginId": "client-cards", "pluginName": "Client cards", "path": "/ui/replace/clients/" }\n    }\n  }\n}',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/plugins/frame-token/:id',
+        summary:
+          'A short-lived (2 hours) token for the pages of an enabled plugin that adds a menu entry or replaces a page. The panel UI puts it in the address of the sandboxed iframe (/panel/plugin-frame/<token>/ui/...), because that frame has no cookie and so cannot load its own scripts and styles with the session. The token opens only GET and HEAD below /ui/ of that one plugin, dies when the plugin is disabled, updated or removed, and is not an API token. 404 for an unknown plugin or one that adds no page, 503 when it is disabled. Master panels (node-sync) cannot call it. LucX-UI only.',
+        params: [{ name: 'id', in: 'path', type: 'string', desc: 'Plugin id.' }],
+        response:
+          '{\n  "success": true,\n  "obj": { "token": "lxf.eyJpIjoi...", "expiresAt": "2026-10-18T14:00:00Z" }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/plugins/update-preview/:id',
+        summary:
+          "Download the plugin's own repository again (where it was installed from, or at the given ref) and say what an update would change: the new version and commit, which permissions are added, removed or kept, whether the type or scope changes, and needsConfirmation (true when any permission is added or the type or scope changes). upToDate is true when the commit is the installed one; nothing is staged then. A repository that now holds a different plugin id is refused. Nothing on disk changes until /update. Not available to master panels. LucX-UI only.",
+        params: [
+          { name: 'id', in: 'path', type: 'string', desc: 'Plugin id.' },
+          {
+            name: 'ref',
+            in: 'body (json)',
+            type: 'string',
+            optional: true,
+            desc: 'A branch, tag or commit name in the same repository (one path segment). Default: where the plugin was installed from.',
+          },
+        ],
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "token": "9f1c...",\n    "commit": "2222222222222222222222222222222222222222",\n    "current": { "version": "1.2.0", "commit": "0123456789abcdef0123456789abcdef01234567" },\n    "upToDate": false,\n    "diff": { "added": ["network"], "removed": [], "kept": ["api:clients:read"], "dangerousAdded": ["network"] },\n    "typeChanged": false,\n    "scopeChanged": false,\n    "needsConfirmation": true\n  }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/plugins/update/:id',
+        summary:
+          "Install a previewed update. The permissions sent must equal exactly those of the new manifest, so a grown set has to be confirmed by the caller. The process is stopped, the old code is kept as the single rollback copy, the new code, version, commit, permissions and menu replace it, and the enabled state, install time and data stay. A running plugin must become healthy within 30 seconds; if it does not, the previous version is restored automatically and the call fails saying so. Only a download from the plugin's own repository is accepted. Not available to master panels. LucX-UI only.",
+        params: [
+          { name: 'id', in: 'path', type: 'string', desc: 'Plugin id.' },
+          {
+            name: 'token',
+            in: 'body (json)',
+            type: 'string',
+            desc: 'The token from update-preview.',
+          },
+          {
+            name: 'permissions',
+            in: 'body (json)',
+            type: 'string[]',
+            desc: 'Exactly the permissions of the new manifest.',
+          },
+        ],
+        errorResponse:
+          '{\n  "success": false,\n  "msg": "plugins: update failed (the update did not work and the previous version was restored: the new version was not healthy after 30s (running): connection refused)"\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/plugins/rollback/:id',
+        summary:
+          'Go back to the version that was installed before the last update, restoring its permissions and menu; data stays. Fails when there is no earlier version or its saved code is gone. The code it replaces is dropped. Not available to master panels. LucX-UI only.',
+        params: [{ name: 'id', in: 'path', type: 'string', desc: 'Plugin id.' }],
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/plugins/catalog',
+        summary:
+          "The signed plugin catalog with each plugin's relation to what is installed here (status: available, installed, update-available, or id-conflict when another repository's plugin with that id is installed). The index (index.json + index.json.sig, ed25519) is fetched at most every 6 hours and cached on disk; state is ok, stale (the cached catalog is shown with the reason a refresh failed), error, not-published (the catalog address answers 404: nothing has been published there yet, which is not an error) or unconfigured (the panel has no catalog key). A catalog older than the newest one ever seen is refused. Nothing is installed by listing. Not available to master panels. LucX-UI only.",
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "state": "ok",\n    "base": "https://raw.githubusercontent.com/AllIsA1/lucx-plugins-index/main",\n    "customBase": "",\n    "sequence": 7,\n    "plugins": [\n      {\n        "id": "block-ads",\n        "name": "Block ads",\n        "summary": "Routes ad domains to block",\n        "repo": "https://github.com/acme/block-ads",\n        "commit": "0123456789abcdef0123456789abcdef01234567",\n        "version": "1.2.0",\n        "manifestSha256": "…",\n        "type": "process",\n        "scope": "both",\n        "permissions": ["pipeline:xray.config"],\n        "verified": { "by": "LucX", "at": "2026-10-10" },\n        "status": "available"\n      }\n    ]\n  }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/plugins/catalog/refresh',
+        summary:
+          'Fetch the catalog now instead of waiting for the cache to age; same result as GET /catalog. Not available to master panels. LucX-UI only.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/plugins/catalog/preview/:id',
+        summary:
+          'Preview a catalog plugin for install: the repository is downloaded at the commit the index signed and refused unless lucx-plugin.json (SHA-256), the permissions, type, scope and id are exactly what the index says. The result is an ordinary preview (catalog is listed); confirm it with /install as usual. Not available to master panels. LucX-UI only.',
+        params: [{ name: 'id', in: 'path', type: 'string', desc: 'Plugin id in the catalog.' }],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/plugins/catalog/update-preview/:id',
+        summary:
+          'Preview an update of an installed plugin to the commit the catalog signed, with the same checks as catalog/preview and the same result as update-preview; apply it with /update. Not available to master panels. LucX-UI only.',
+        params: [{ name: 'id', in: 'path', type: 'string', desc: 'Installed plugin id.' }],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/plugins/catalog/settings',
+        summary:
+          "Set the catalog mirror (https only, plain http for loopback; an empty value restores the default). The signature is still checked against the panel's own keys, so a mirror can serve the catalog but not change it. Not available to master panels. LucX-UI only.",
+        params: [
+          {
+            name: 'base',
+            in: 'body (json)',
+            type: 'string',
+            desc: 'Base URL that serves index.json and index.json.sig.',
+          },
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/plugins/preview',
+        summary:
+          'Download a plugin repository (https://github.com/<owner>/<repo>[/tree/<ref>] only), unpack it into a staging area and validate its lucx-plugin.json. Returns a single-use token valid for 15 minutes together with the manifest, the resolved commit and the permissions that need explicit confirmation. At most five previews are kept; the oldest is dropped. LucX-UI only.',
+        params: [
+          {
+            name: 'url',
+            in: 'body (json)',
+            type: 'string',
+            desc: 'GitHub repository link, optionally with /tree/<branch|tag|commit>.',
+          },
+        ],
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "token": "5f2c0d1e9a7b4c3d8e6f1a2b3c4d5e6f",\n    "source": { "owner": "acme", "repo": "alerts" },\n    "commit": "0123456789abcdef0123456789abcdef01234567",\n    "manifest": { "id": "traffic-alerts", "name": "Traffic Alerts", "version": "1.2.0", "apiVersion": "1", "type": "process", "scope": "master", "permissions": ["api:clients:read", "network"] },\n    "dangerous": ["network"],\n    "installed": false,\n    "expiresAt": "2026-10-18T12:15:00Z"\n  }\n}',
+        errorResponse:
+          '{\n  "success": false,\n  "msg": "plugins: preview failed (only https://github.com/<owner>/<repo> links are supported)"\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/plugins/install',
+        summary:
+          'Install a previewed plugin. permissions must equal the manifest permissions (order and duplicates ignored); a missing or extra entry is rejected. The token works once. The plugin is installed disabled. LucX-UI only.',
+        params: [
+          { name: 'token', in: 'body (json)', type: 'string', desc: 'Token from /preview.' },
+          {
+            name: 'permissions',
+            in: 'body (json)',
+            type: 'string[]',
+            desc: 'The permissions the operator confirmed.',
+          },
+        ],
+        errorResponse:
+          '{\n  "success": false,\n  "msg": "plugins: install failed (accepted permissions do not match the plugin manifest)"\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/plugins/enable/:id',
+        summary: 'Mark an installed plugin enabled. LucX-UI only.',
+        params: [{ name: 'id', in: 'path', type: 'string', desc: 'Plugin id.' }],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/plugins/disable/:id',
+        summary: 'Mark an installed plugin disabled. LucX-UI only.',
+        params: [{ name: 'id', in: 'path', type: 'string', desc: 'Plugin id.' }],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/plugins/remote/install',
+        summary:
+          'Install a plugin on a node exactly as a master panel approved it. The node downloads the pinned commit itself and refuses unless the manifest hash, the permission set and the scope (node or both) match; the plugin is installed disabled and marked as master-managed. Master panels (node-sync scope or a verified node certificate) can call this only after the node owner allowed master management. LucX-UI only.',
+        params: [
+          {
+            name: 'url',
+            in: 'body (json)',
+            type: 'string',
+            desc: 'https://github.com/<owner>/<repo>.',
+          },
+          {
+            name: 'commit',
+            in: 'body (json)',
+            type: 'string',
+            desc: 'Full lowercase commit SHA; a branch or tag is rejected.',
+          },
+          {
+            name: 'manifestSha256',
+            in: 'body (json)',
+            type: 'string',
+            desc: 'SHA-256 of lucx-plugin.json at that commit.',
+          },
+          {
+            name: 'permissions',
+            in: 'body (json)',
+            type: 'string[]',
+            desc: 'Exactly the permissions the operator approved.',
+          },
+        ],
+        errorResponse:
+          '{\n  "success": false,\n  "msg": "plugins: install failed (the plugin manifest differs from the one that was approved)"\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/plugins/master-management',
+        summary:
+          'Let a master panel install and control plugins on this node (off by default), or revoke that. Only the node owner can call it: master panels cannot. While it is off every master call to the plugin API answers 403. A master can only ever use list, remote/install, enable, disable, uninstall, restart and logs, and only for plugins it installed itself. LucX-UI only.',
+        params: [
+          {
+            name: 'allow',
+            in: 'body (json)',
+            type: 'boolean',
+            desc: 'true to allow, false to revoke.',
+          },
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/plugins/restart/:id',
+        summary:
+          'Stop an enabled plugin process and start it again right away. Fails for a disabled plugin. LucX-UI only.',
+        params: [{ name: 'id', in: 'path', type: 'string', desc: 'Plugin id.' }],
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/plugins/logs/:id',
+        summary:
+          'The last lines the plugin process wrote (systemd journal of its unit). Fails when the system cannot run plugin processes. LucX-UI only.',
+        params: [
+          { name: 'id', in: 'path', type: 'string', desc: 'Plugin id.' },
+          {
+            name: 'lines',
+            in: 'query',
+            type: 'integer',
+            optional: true,
+            defaultValue: 200,
+            desc: 'How many lines to return (capped at 1000).',
+          },
+        ],
+        response:
+          '{\n  "success": true,\n  "obj": ["ready", "listening on /run/x-ui-plugins/hello/plugin.sock"]\n}',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/plugins/x/:id/*path',
+        summary:
+          'Forward a GET to the plugin process (unix socket), or, for an interface plugin (type ui), serve a file below its ui/ directory (/ui/index.html; a path ending in / serves index.html there; no listing). The panel authenticates the caller, the plugin never sees the cookie, Authorization or CSRF header and receives X-LucX-User, X-LucX-Plugin-Id and X-LucX-Request-Id instead. Every response is sandboxed (pages themselves are opened through the token address of frame-token): Set-Cookie and CORS headers are dropped, Content-Security-Policy is forced to a script-only sandbox without network access and the page may be framed by the panel only. 404 for an unknown plugin, reserved path or missing file, 503 when the plugin is not running or disabled, 502 when it does not answer, 405 for a non-GET on a static page. Plugin API tokens cannot use this route. LucX-UI only.',
+        params: [
+          { name: 'id', in: 'path', type: 'string', desc: 'Plugin id.' },
+          {
+            name: 'path',
+            in: 'path',
+            type: 'string',
+            desc: 'Path inside the plugin, for example api/ping. Paths starting with _lucx are reserved and answer 404.',
+          },
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/plugins/x/:id/*path',
+        summary:
+          'Forward a POST (body up to 10 MiB) to the plugin process. See the GET variant for the guarantees. LucX-UI only.',
+        params: [
+          { name: 'id', in: 'path', type: 'string', desc: 'Plugin id.' },
+          {
+            name: 'path',
+            in: 'path',
+            type: 'string',
+            desc: 'Path inside the plugin, for example api/ping. Paths starting with _lucx are reserved and answer 404.',
+          },
+        ],
+      },
+      {
+        method: 'PUT',
+        path: '/panel/api/plugins/x/:id/*path',
+        summary:
+          'Forward a PUT to the plugin process. See the GET variant for the guarantees. LucX-UI only.',
+        params: [
+          { name: 'id', in: 'path', type: 'string', desc: 'Plugin id.' },
+          {
+            name: 'path',
+            in: 'path',
+            type: 'string',
+            desc: 'Path inside the plugin, for example api/ping. Paths starting with _lucx are reserved and answer 404.',
+          },
+        ],
+      },
+      {
+        method: 'DELETE',
+        path: '/panel/api/plugins/x/:id/*path',
+        summary:
+          'Forward a DELETE to the plugin process. See the GET variant for the guarantees. LucX-UI only.',
+        params: [
+          { name: 'id', in: 'path', type: 'string', desc: 'Plugin id.' },
+          {
+            name: 'path',
+            in: 'path',
+            type: 'string',
+            desc: 'Path inside the plugin, for example api/ping. Paths starting with _lucx are reserved and answer 404.',
+          },
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/plugins/uninstall/:id',
+        summary:
+          'Forget the plugin, delete its code and, when removeData is true, its data directory. The panel behaves as if the plugin was never installed. LucX-UI only.',
+        params: [
+          { name: 'id', in: 'path', type: 'string', desc: 'Plugin id.' },
+          {
+            name: 'removeData',
+            in: 'body (json)',
+            type: 'boolean',
+            optional: true,
+            defaultValue: false,
+            desc: 'Also delete /var/lib/x-ui-plugins/<id>.',
+          },
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/plugins/settings',
+        summary:
+          'Set the archive mirror used for downloads (for hosts that cannot reach codeload.github.com). https only, plain http for loopback; an empty value restores the default. LucX-UI only.',
+        params: [
+          {
+            name: 'archiveBase',
+            in: 'body (json)',
+            type: 'string',
+            desc: 'Base URL such as https://mirror.example/gh; archives are fetched from <base>/<owner>/<repo>/tar.gz/<ref>.',
+          },
+        ],
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/plugins/nodes',
+        summary:
+          'What this master knows about the plugins on each enabled node, refreshed every 30 seconds. state is ok (plugins holds the node report), pending (not read yet), offline, unsupported (the node does not announce plugin support) or error (error says why). Master panel only; a node cannot call it for other nodes. LucX-UI only.',
+        response:
+          '{\n  "success": true,\n  "obj": [\n    {\n      "nodeId": 3,\n      "nodeName": "de-fra-1",\n      "state": "ok",\n      "fetchedAt": 1760789000,\n      "plugins": { "available": true, "allowMasterManagement": true, "plugins": [] }\n    }\n  ]\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/plugins/nodes/:nodeId/refresh',
+        summary: 'Read one node right now instead of waiting for the next poll. LucX-UI only.',
+        params: [{ name: 'nodeId', in: 'path', type: 'integer', desc: 'Node id.' }],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/plugins/nodes/:nodeId/install',
+        summary:
+          "Install a plugin that is installed on this panel onto a node, disabled. The commit, manifest hash and URL come from this panel's own record, never from the request; the permissions must equal those granted here. The node downloads and verifies the commit itself and must have master management allowed. A plugin of scope master cannot be sent. LucX-UI only.",
+        params: [
+          { name: 'nodeId', in: 'path', type: 'integer', desc: 'Node id.' },
+          {
+            name: 'id',
+            in: 'body (json)',
+            type: 'string',
+            desc: 'Id of a plugin installed on this panel.',
+          },
+          {
+            name: 'permissions',
+            in: 'body (json)',
+            type: 'string[]',
+            desc: 'Exactly the permissions granted to the plugin on this panel.',
+          },
+        ],
+        errorResponse:
+          '{\n  "success": false,\n  "msg": "plugins: node install failed (plugin management by the master is disabled on this node; turn it on in this node\'s Plugins page)"\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/plugins/nodes/:nodeId/update/:id',
+        summary:
+          "Move a plugin the master installed on a node to this panel's commit: the old one is removed (its data stays), the pinned commit from this panel's own record is installed and, if the plugin was on, turned on again. Refused before the node is touched when the permissions differ from this panel's, the plugin is not installed on the node, was installed there by hand, or already runs this commit. There is no automatic way back: a failure says whether the old version was removed and the new one not installed, or the new one is installed but off. The node must have allowed management by the master. LucX-UI only.",
+        params: [
+          { name: 'nodeId', in: 'path', type: 'integer', desc: 'Node id.' },
+          { name: 'id', in: 'path', type: 'string', desc: 'Plugin id.' },
+          {
+            name: 'permissions',
+            in: 'body (json)',
+            type: 'string[]',
+            desc: 'Exactly the permissions granted to the plugin on this panel.',
+          },
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/plugins/nodes/:nodeId/enable/:id',
+        summary: 'Enable a plugin the master installed on a node. LucX-UI only.',
+        params: [
+          { name: 'nodeId', in: 'path', type: 'integer', desc: 'Node id.' },
+          { name: 'id', in: 'path', type: 'string', desc: 'Plugin id.' },
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/plugins/nodes/:nodeId/disable/:id',
+        summary: 'Disable a plugin the master installed on a node. LucX-UI only.',
+        params: [
+          { name: 'nodeId', in: 'path', type: 'integer', desc: 'Node id.' },
+          { name: 'id', in: 'path', type: 'string', desc: 'Plugin id.' },
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/plugins/nodes/:nodeId/restart/:id',
+        summary: 'Restart the process of a plugin the master installed on a node. LucX-UI only.',
+        params: [
+          { name: 'nodeId', in: 'path', type: 'integer', desc: 'Node id.' },
+          { name: 'id', in: 'path', type: 'string', desc: 'Plugin id.' },
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/plugins/nodes/:nodeId/uninstall/:id',
+        summary:
+          'Remove a plugin the master installed from a node, optionally with its data. LucX-UI only.',
+        params: [
+          { name: 'nodeId', in: 'path', type: 'integer', desc: 'Node id.' },
+          { name: 'id', in: 'path', type: 'string', desc: 'Plugin id.' },
+          {
+            name: 'removeData',
+            in: 'body (json)',
+            type: 'boolean',
+            optional: true,
+            defaultValue: false,
+            desc: 'Also delete the plugin data directory on the node.',
+          },
+        ],
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/plugins/nodes/:nodeId/logs/:id',
+        summary: "The last lines a node's plugin process wrote. LucX-UI only.",
+        params: [
+          { name: 'nodeId', in: 'path', type: 'integer', desc: 'Node id.' },
+          { name: 'id', in: 'path', type: 'string', desc: 'Plugin id.' },
+          {
+            name: 'lines',
+            in: 'query',
+            type: 'integer',
+            optional: true,
+            defaultValue: 200,
+            desc: 'How many lines.',
+          },
+        ],
+      },
+    ],
+  },
+  // END LUCX-HOOK
+
+  {
+    id: 'server',
+    title: 'Server',
+    description:
+      'System status, log retrieval, certificate generators, Xray binary management, and backup/restore. All under /panel/api/server.',
+    endpoints: [
+      {
+        method: 'GET',
+        path: '/panel/api/openapi.json',
+        summary:
+          'Serve this API description as an OpenAPI 3 document — the same file that powers the API Docs page. Requires a session or Bearer token like the rest of /panel/api. Useful for generating clients or importing into API tooling.',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/server/status',
+        summary:
+          'Real-time machine snapshot: CPU, memory, swap, disk, network IO, load averages, open connections, Xray state. Cached and refreshed every 2 seconds in the background.',
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "cpu": 12.5,\n    "mem": { "current": 2147483648, "total": 8589934592 },\n    "swap": { "current": 0, "total": 4294967296 },\n    "disk": { "current": 53687091200, "total": 268435456000 },\n    "netIO": { "up": 1073741824, "down": 2147483648 },\n    "xray": { "state": "running", "version": "v25.10.31" },\n    "tcpCount": 42,\n    "load": { "load1": 0.5, "load5": 0.3, "load15": 0.2 }\n  }\n}',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/server/fail2banStatus',
+        summary:
+          'Reports whether per-client IP limits can be enforced on this host. The panel uses it to gate the "IP Limit" field, since enforcement depends on Fail2ban being installed.',
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "enabled": true,\n    "installed": true,\n    "usable": true,\n    "windows": false\n  }\n}',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/server/bbrStatus',
+        summary:
+          'Reports whether TCP BBR congestion control (paired with fq/cake) is active. AWG/WireGuard itself is UDP and unaffected, but TCP flows the panel proxies benefit on higher-latency or lossy paths.',
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "supported": true,\n    "enabled": false,\n    "congestionControl": "cubic",\n    "qdisc": "fq_codel",\n    "windows": false\n  }\n}',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/server/cpuHistory/:bucket',
+        summary:
+          'Legacy: aggregated CPU history. Use /history/cpu/:bucket instead — same data with a uniform {t, v} shape.',
+        params: [
+          {
+            name: 'bucket',
+            in: 'path',
+            type: 'number',
+            desc: 'Bucket size in seconds. Allowed: 2, 30, 60, 120, 180, 300.',
+          },
+        ],
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/server/history/:metric/:bucket',
+        summary:
+          'Aggregated time-series for one metric. Returns an array of {t, v} samples covering the last ~6 hours.',
+        params: [
+          {
+            name: 'metric',
+            in: 'path',
+            type: 'string',
+            desc: 'cpu | mem | netUp | netDown | online | load1 | load5 | load15.',
+          },
+          {
+            name: 'bucket',
+            in: 'path',
+            type: 'number',
+            desc: 'Bucket size in seconds. Allowed: 2, 30, 60, 120, 180, 300.',
+          },
+        ],
+        response:
+          '{\n  "success": true,\n  "obj": [\n    { "t": 1700000000, "v": 12.5 },\n    { "t": 1700000002, "v": 13.1 }\n  ]\n}',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/server/xrayMetricsState',
+        summary:
+          'Xray runtime metrics state — whether the xray config has a `metrics` block, which expvar keys are flowing, and the current snapshot values for each. Returns an empty state when metrics are not configured.',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/server/xrayMetricsHistory/:metric/:bucket',
+        summary:
+          'Time-series history for one Xray runtime metric over the last ~6 hours. Same {t, v} shape as /history/:metric/:bucket.',
+        params: [
+          {
+            name: 'metric',
+            in: 'path',
+            type: 'string',
+            desc: 'xrAlloc | xrSys | xrHeapObjects | xrNumGC | xrPauseNs.',
+          },
+          {
+            name: 'bucket',
+            in: 'path',
+            type: 'number',
+            desc: 'Bucket size in seconds. Allowed: 2, 30, 60, 120, 180, 300.',
+          },
+        ],
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/server/xrayObservatory',
+        summary:
+          'Latest snapshot from the Xray observatory — per-outbound latency, health status, and last-probe time. Only populated when the Xray config has an observatory configured.',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/server/xrayObservatoryHistory/:tag/:bucket',
+        summary:
+          'Time-series of observatory probe results for one outbound tag. Same {t, v} shape as the other history endpoints.',
+        params: [
+          {
+            name: 'tag',
+            in: 'path',
+            type: 'string',
+            desc: 'Outbound tag from the observatory config.',
+          },
+          {
+            name: 'bucket',
+            in: 'path',
+            type: 'number',
+            desc: 'Bucket size in seconds. Allowed: 2, 30, 60, 120, 180, 300.',
+          },
+        ],
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/server/getXrayVersion',
+        summary: 'List Xray binary versions available for install on this host.',
+        response: '{\n  "success": true,\n  "obj": ["v25.10.31", "v25.9.15", "v25.8.1"]\n}',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/server/getPanelUpdateInfo',
+        summary: 'Check whether a newer 3x-ui release is available on GitHub.',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/server/getPanelReleaseNotes',
+        summary:
+          'Paged changelog of stable GitHub releases newer than the running panel (skipped versions). LucX-UI only.',
+        params: [
+          {
+            name: 'page',
+            in: 'query',
+            type: 'number',
+            desc: '1-based page (10 releases per page).',
+          },
+        ],
+        responseSchema: 'PanelReleaseNotes',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/server/getUpdateStatus',
+        summary:
+          'Report the outcome of the most recently launched panel self-update (see POST updatePanel). Compare the returned runId against the one updatePanel returned to tell this run apart from a stale result.',
+        responseSchema: 'PanelUpdateStatus',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/server/getConfigJson',
+        summary: 'Return the assembled Xray config that\u2019s currently running on this host.',
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "log": { "loglevel": "warning" },\n    "inbounds": [...],\n    "outbounds": [...],\n    "routing": { "rules": [...] }\n  }\n}',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/server/getDb',
+        summary:
+          'Stream a full database backup as an attachment: the SQLite .db file on SQLite panels, or a pg_dump custom-format archive (.dump) on PostgreSQL panels. Use as a manual backup.',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/server/getMigration',
+        summary:
+          'Stream a cross-engine migration file as an attachment: a .dump (SQL text) on SQLite, or a .db SQLite database built from the live data on PostgreSQL.',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/server/getNewUUID',
+        summary: 'Generate a fresh UUID v4. Convenience helper for client IDs.',
+        responseSchema: 'NewUUIDResponse',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/server/getWebCertFiles',
+        summary:
+          'Return this panel\'s own web TLS certificate and key file paths. The central panel calls it on a node (via the node API token) so "Set Cert from Panel" fills a node-assigned inbound with paths that exist on the node.',
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "webCertFile": "/root/cert/example.com/fullchain.pem",\n    "webKeyFile": "/root/cert/example.com/privkey.pem"\n  }\n}',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/server/descendants',
+        summary:
+          'Read-only summaries (guid, parentGuid, name, address, status, versions) of the nodes this panel manages. A parent panel calls it on a node (via the node API token) to surface transitive sub-nodes in a chained topology. Counts are computed by the parent, not returned here.',
+        response:
+          '{\n  "success": true,\n  "obj": [\n    {\n      "guid": "c3d4-...",\n      "parentGuid": "a1b2-...",\n      "name": "Node3",\n      "address": "10.0.0.3",\n      "status": "online"\n    }\n  ]\n}',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/server/getNewX25519Cert',
+        summary: 'Generate a new X25519 keypair for Reality.',
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "privateKey": "uN9qLfV3zH8w...",\n    "publicKey": "5v8xPqR2sM7k..."\n  }\n}',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/server/getNewmldsa65',
+        summary: 'Generate a new ML-DSA-65 keypair. Returns {seed, verify}.',
+        responseSchema: 'MLDSA65Response',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/server/getNewmlkem768',
+        summary: 'Generate a new ML-KEM-768 keypair. Returns {seed, client}.',
+        responseSchema: 'MLKEM768Response',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/server/getNewVlessEnc',
+        summary:
+          'Generate VLESS encryption auth options. Returns an auths array each with id, label, encryption, and decryption fields.',
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "auths": [\n      { "id": 0, "label": "Auth #0", "encryption": "aes-256-gcm", "decryption": "" }\n    ]\n  }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/server/stopXrayService',
+        summary: 'Stop the Xray binary. All proxies go offline immediately.',
+        errorResponse: '{\n  "success": false,\n  "msg": "Xray is not running"\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/server/restartXrayService',
+        summary:
+          'Reload Xray with the current config. Typically required after structural inbound or routing changes.',
+        errorResponse: '{\n  "success": false,\n  "msg": "Xray config is invalid: ..."\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/server/installXray/:version',
+        summary:
+          'Download and install the specified Xray version. Pass "latest" for the newest release.',
+        params: [
+          {
+            name: 'version',
+            in: 'path',
+            type: 'string',
+            desc: 'Xray tag (e.g. v25.10.31) or "latest".',
+          },
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/server/restartAwg',
+        summary: 'Stop and re-up managed AWG kernel interfaces (inbounds + outbounds).',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/server/rebuildAwgModule',
+        summary:
+          'Install or rebuild the amneziawg DKMS module from upstream master (async). Runs bin/install-awg-module.sh --force-rebuild --no-kernel-upgrade.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/server/uninstallAwgModule',
+        summary:
+          'Remove the amneziawg DKMS module and awg/awg-quick tools. Inbound .conf files are kept.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/server/enableBbr',
+        summary:
+          'Enable TCP BBR + fq (writes /etc/sysctl.d/99-bbr-x-ui.conf and applies it live). Linux only.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/server/disableBbr',
+        summary:
+          'Restore the congestion control / qdisc that were active before enableBbr ran, and remove the drop-in file. Linux only.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/server/updatePanel',
+        summary: 'Self-update the panel to the latest version. The server restarts on success.',
+        params: [
+          {
+            name: 'dev',
+            in: 'body (form)',
+            type: 'boolean',
+            desc: "Override this run's channel. Omit to use the panel's configured channel.",
+            optional: true,
+          },
+        ],
+        response: '{\n  "success": true,\n  "obj": {\n    "runId": "1735689600123456789"\n  }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/server/setUpdateChannel',
+        summary:
+          'Toggle the panel update channel between stable and the rolling per-commit dev release. Only effective on dev builds.',
+        params: [
+          {
+            name: 'dev',
+            in: 'body (form)',
+            type: 'boolean',
+            desc: 'true = dev channel, false = stable.',
+          },
+        ],
+        body: 'dev=true',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/server/updateGeofile',
+        summary:
+          'Refresh the default GeoIP / GeoSite data files. Use the /:fileName variant to update one file.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/server/updateGeofile/:fileName',
+        summary: 'Refresh a single Geo file by filename (e.g. geoip.dat, geosite.dat).',
+        params: [
+          {
+            name: 'fileName',
+            in: 'path',
+            type: 'string',
+            desc: 'Filename of the data file to refresh.',
+          },
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/server/logs/:count',
+        summary: 'Return the last N lines of the panel\u2019s own log.',
+        params: [
+          { name: 'count', in: 'path', type: 'number', desc: 'Number of trailing log lines.' },
+          {
+            name: 'level',
+            in: 'body (form)',
+            type: 'string',
+            desc: 'Minimum log level filter.',
+            optional: true,
+          },
+          {
+            name: 'syslog',
+            in: 'body (form)',
+            type: 'boolean',
+            desc: 'Read system logs instead of the panel log.',
+            optional: true,
+          },
+        ],
+        body: 'level=info&syslog=false',
+        responseObjectSchema: { type: 'array', nullable: true, items: { type: 'string' } },
+        response:
+          '{\n  "success": true,\n  "obj": [\n    "2025/01/01 12:00:00 [INFO] Server started",\n    "2025/01/01 12:00:01 [INFO] Xray is running"\n  ]\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/server/xraylogs/:count',
+        summary: 'Return the last N lines of the Xray process log.',
+        params: [
+          { name: 'count', in: 'path', type: 'number', desc: 'Number of trailing log lines.' },
+          {
+            name: 'filter',
+            in: 'body (form)',
+            type: 'string',
+            desc: 'Keyword filter — only lines containing this string.',
+            optional: true,
+          },
+          {
+            name: 'showDirect',
+            in: 'body (form)',
+            type: 'string',
+            desc: '"true" to include direct (freedom) traffic lines.',
+            optional: true,
+          },
+          {
+            name: 'showBlocked',
+            in: 'body (form)',
+            type: 'string',
+            desc: '"true" to include blocked (blackhole) traffic lines.',
+            optional: true,
+          },
+          {
+            name: 'showProxy',
+            in: 'body (form)',
+            type: 'string',
+            desc: '"true" to include proxy traffic lines.',
+            optional: true,
+          },
+        ],
+        body: 'filter=error&showDirect=false&showBlocked=true&showProxy=true',
+        responseSchema: 'LogEntry',
+        responseSchemaArray: true,
+        responseSchemaArrayNullable: true,
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/server/amneziawglogs/:count',
+        summary:
+          'Return live AmneziaWG peer activity (handshake, endpoint, transfer) plus the panel’s own AmneziaWG event lines.',
+        params: [
+          {
+            name: 'count',
+            in: 'path',
+            type: 'number',
+            desc: 'Maximum peer rows and event lines to return.',
+          },
+          {
+            name: 'filter',
+            in: 'body (form)',
+            type: 'string',
+            desc: 'Keyword filter — only rows/lines containing this string.',
+            optional: true,
+          },
+        ],
+        body: 'filter=awg1',
+        responseSchema: 'AmneziaWGLogs',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/server/importDB',
+        summary:
+          'Restore the panel DB from an uploaded backup (multipart form, field name "db"). SQLite panels accept a SQLite database (.db) or a SQLite migration dump (.dump); PostgreSQL panels accept a pg_dump archive (.dump), a SQLite database (.db), or a SQLite migration dump. The panel restarts after restore. Destructive.',
+        params: [
+          {
+            name: 'db',
+            in: 'body (multipart)',
+            type: 'file',
+            desc: 'Database backup or migration file to upload.',
+          },
+          {
+            name: 'keepHostSettings',
+            in: 'body (multipart)',
+            type: 'boolean',
+            desc: "Keep this machine's addresses, certificates and node identity. Default true.",
+            optional: true,
+            defaultValue: true,
+          },
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/server/getNewEchCert',
+        summary:
+          'Generate a new ECH (Encrypted Client Hello) keypair and config list for the given SNI.',
+        params: [
+          {
+            name: 'sni',
+            in: 'body (form)',
+            type: 'string',
+            desc: 'Server Name Indication to generate the ECH config for.',
+          },
+        ],
+        body: 'sni=example.com',
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "echKeySet": "...",\n    "echServerKeys": [...],\n    "echConfigList": "..."\n  }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/server/getCertHash',
+        summary:
+          'Compute the hex SHA-256 of a certificate (DER) for pinning (pinnedPeerCertSha256). Provide either a server file path or inline PEM/DER content.',
+        bodyRequiredOneOf: ['certFile', 'certContent'],
+        params: [
+          {
+            name: 'certFile',
+            in: 'body (form)',
+            type: 'string',
+            desc: 'Path to a certificate file on the server. Takes precedence over certContent.',
+            optional: true,
+            pattern: '.*\\S.*',
+          },
+          {
+            name: 'certContent',
+            in: 'body (form)',
+            type: 'string',
+            desc: 'Inline PEM (or DER) certificate content, used when certFile is empty.',
+            optional: true,
+            pattern: '.*\\S.*',
+          },
+        ],
+        body: 'certFile=/root/cert.crt',
+        response: '{\n  "success": true,\n  "obj": [\n    "e8e2d3..."\n  ]\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/server/getRemoteCertHash',
+        summary:
+          'Run `xray tls ping` against a remote server and return its live leaf-certificate SHA-256 hash(es) for pinning (pinnedPeerCertSha256).',
+        params: [
+          {
+            name: 'server',
+            in: 'body (form)',
+            type: 'string',
+            desc: 'Remote server as domain or domain:port (default port 443), e.g. cloudflare-dns.com.',
+          },
+          {
+            name: 'allowPrivate',
+            in: 'body (form)',
+            type: 'boolean',
+            optional: true,
+            desc: 'Ping a private/internal/loopback server (LAN, Docker service name). Default false (SSRF guard blocks it and the error response sets obj.privateTarget=true).',
+          },
+        ],
+        body: 'server=cloudflare-dns.com',
+        response: '{\n  "success": true,\n  "obj": [\n    "e8e2d3..."\n  ]\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/server/scanRealityTarget',
+        summary:
+          'Run a live TLS 1.3 probe against a candidate REALITY target and return a feasibility verdict (TLS 1.3 + h2 + X25519 + trusted certificate) plus the certificate SAN DNS names. A target on a private/loopback address is reported with privateTarget=true and probed only when allowPrivate is set.',
+        params: [
+          {
+            name: 'target',
+            in: 'body (form)',
+            type: 'string',
+            desc: 'Candidate target as host or host:port (default port 443), e.g. www.cloudflare.com:443.',
+          },
+          {
+            name: 'sni',
+            in: 'body (form)',
+            type: 'string',
+            optional: true,
+            desc: 'SNI the handshake sends and the certificate is verified against (the inbound serverNames). Defaults to the target host, which a fronting proxy answers with its default certificate.',
+          },
+          {
+            name: 'xver',
+            in: 'body (form)',
+            type: 'number',
+            optional: true,
+            desc: 'PROXY protocol version the target expects (matches the inbound xver). 0 = none.',
+          },
+          {
+            name: 'allowPrivate',
+            in: 'body (form)',
+            type: 'boolean',
+            optional: true,
+            desc: 'Probe a private/internal/loopback target (LAN, Docker service name). Default false (SSRF guard blocks it and the response sets privateTarget=true).',
+          },
+        ],
+        body: 'target=www.cloudflare.com:443',
+        responseSchema: 'RealityScanResult',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/server/scanRealityTargets',
+        summary:
+          'Probe/discover REALITY targets and return each verdict ranked by feasibility then latency. Each comma-separated token may be a domain (validated with SNI), a bare IP, or a CIDR range (discovered without SNI by reading the certificate domain). When empty, the realityScanCandidates setting is probed (the built-in seed list if that setting is empty).',
+        params: [
+          {
+            name: 'targets',
+            in: 'body (form)',
+            type: 'string',
+            optional: true,
+            desc: 'Optional comma-separated tokens: domain[:port], IP[:port], or CIDR (e.g. 104.16.0.0/24). When omitted, the realityScanCandidates setting is probed (the built-in seed list if that setting is empty).',
+          },
+        ],
+        body: 'targets=104.16.0.0/24,www.apple.com:443',
+        responseSchema: 'RealityScanResult',
+        responseSchemaArray: true,
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/server/clientIps',
+        summary:
+          'Fetch the fully aggregated inbound_client_ips database table. Used by nodes to sync recently active IPs across the cluster.',
+        responseSchema: 'InboundClientIps',
+        responseSchemaArray: true,
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/server/clientIps',
+        summary:
+          'Submit a list of recently active IP timestamps. The panel merges them with the existing database to maintain a unified global IP-limit view.',
+        requestSchema: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              clientEmail: { type: 'string' },
+              ips: {
+                type: 'array',
+                nullable: true,
+                items: {
+                  type: 'object',
+                  properties: { ip: { type: 'string' }, timestamp: { type: 'integer' } },
+                  required: ['ip', 'timestamp'],
+                },
+              },
+            },
+            required: ['clientEmail', 'ips'],
+          },
+        },
+      },
+    ],
+  },
+
+  {
+    id: 'clients',
+    title: 'Clients',
+    description:
+      'Manage clients as first-class entities that can be attached to one or more inbounds. A single client row drives the settings.clients entry in every inbound it belongs to. Endpoints live under /panel/api/clients.',
+    endpoints: [
+      {
+        method: 'GET',
+        path: '/panel/api/clients/list',
+        summary:
+          'List every client with its attached inbound IDs and traffic record. The reverse field, if set, is returned as a nested JSON object (legacy JSON-encoded-string form is still accepted on write).',
+        response:
+          '{\n  "success": true,\n  "obj": [\n    {\n      "id": 1,\n      "email": "alice@example.com",\n      "subId": "abcd1234",\n      "uuid": "...",\n      "totalGB": 53687091200,\n      "expiryTime": 1735689600000,\n      "enable": true,\n      "reverse": null,\n      "inboundIds": [3, 5],\n      "traffic": { "up": 1024, "down": 4096, "enable": true }\n    }\n  ]\n}',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/clients/list/paged',
+        summary:
+          'Filter, sort, and paginate clients on the server. Each item is a slim row (no uuid/password/auth/flow/security/reverse/tgId) so the clients page can ship 25-ish rows in a few KB instead of the full table. The response also includes a summary computed across the full DB row set so dashboard counters stay stable as the user paginates or filters: the *Count fields are exact, while the email arrays beside them stop at 200 entries so the payload does not grow with the panel. Page size capped at 200; fetch /get/:email to obtain the full per-client payload for an edit/info modal.',
+        params: [
+          {
+            name: 'page',
+            in: 'query',
+            type: 'number',
+            desc: '1-indexed page number. Defaults to 1.',
+            optional: true,
+            defaultValue: 1,
+          },
+          {
+            name: 'pageSize',
+            in: 'query',
+            type: 'number',
+            desc: 'Rows per page. Defaults to 25, capped at 200.',
+            optional: true,
+            defaultValue: 25,
+          },
+          {
+            name: 'search',
+            in: 'query',
+            type: 'string',
+            desc: 'Case-insensitive substring match on email, subId, comment, UUID, password, auth or Telegram ID.',
+            optional: true,
+          },
+          {
+            name: 'filter',
+            in: 'query',
+            type: 'string',
+            desc: 'CSV status buckets: online, active, deactive, depleted or expiring. Values are ORed.',
+            optional: true,
+          },
+          {
+            name: 'protocol',
+            in: 'query',
+            type: 'string',
+            desc: 'CSV inbound protocols: vmess, vless, trojan, shadowsocks, wireguard, hysteria, http, mixed, tunnel, tun, mtproto or amneziawg. Values are ORed.',
+            optional: true,
+          },
+          {
+            name: 'inbound',
+            in: 'query',
+            type: 'string',
+            desc: 'CSV positive inbound IDs. Values are ORed; invalid or non-positive IDs are ignored.',
+            optional: true,
+          },
+          {
+            name: 'sort',
+            in: 'query',
+            type: 'string',
+            desc: 'Sort key. An omitted or unknown value falls back to client ID ascending.',
+            optional: true,
+            enum: [
+              'enable',
+              'email',
+              'inboundIds',
+              'traffic',
+              'remaining',
+              'expiryTime',
+              'createdAt',
+              'updatedAt',
+              'lastOnline',
+            ],
+          },
+          {
+            name: 'order',
+            in: 'query',
+            type: 'string',
+            desc: 'Sort direction. Only descend selects descending order; otherwise ascending.',
+            optional: true,
+            enum: ['ascend', 'descend'],
+          },
+          {
+            name: 'expiryFrom',
+            in: 'query',
+            type: 'number',
+            desc: 'Inclusive minimum expiry time in Unix milliseconds. Zero or negative means unset.',
+            optional: true,
+          },
+          {
+            name: 'expiryTo',
+            in: 'query',
+            type: 'number',
+            desc: 'Inclusive maximum expiry time in Unix milliseconds. Zero or negative means unbounded.',
+            optional: true,
+          },
+          {
+            name: 'usageFrom',
+            in: 'query',
+            type: 'number',
+            desc: 'Inclusive minimum combined upload and download usage in bytes. Zero means unset.',
+            optional: true,
+          },
+          {
+            name: 'usageTo',
+            in: 'query',
+            type: 'number',
+            desc: 'Inclusive maximum combined upload and download usage in bytes. Zero means unbounded.',
+            optional: true,
+          },
+          {
+            name: 'autoRenew',
+            in: 'query',
+            type: 'string',
+            desc: 'on selects clients with an interval or calendar-day reset; off selects clients without either.',
+            optional: true,
+            enum: ['on', 'off'],
+          },
+          {
+            name: 'hasTgId',
+            in: 'query',
+            type: 'string',
+            desc: 'yes selects clients with a non-zero Telegram ID; no selects clients without one.',
+            optional: true,
+            enum: ['yes', 'no'],
+          },
+          {
+            name: 'hasComment',
+            in: 'query',
+            type: 'string',
+            desc: 'yes selects clients with a non-blank comment; no selects clients without one.',
+            optional: true,
+            enum: ['yes', 'no'],
+          },
+          {
+            name: 'group',
+            in: 'query',
+            type: 'string',
+            desc: 'CSV group names, matched case-insensitively after trimming. Values are ORed.',
+            optional: true,
+          },
+        ],
+        responseSchema: 'ClientPageResponse',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/clients/get/:email',
+        summary:
+          'Fetch one client by email, including the inbound IDs and external config IDs it is attached to.',
+        params: [
+          { name: 'email', in: 'path', type: 'string', desc: 'Client email (unique identifier).' },
+        ],
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "client": { "id": 1, "email": "alice@example.com", ... },\n    "inboundIds": [3, 5],\n    "externalLinks": [\n      { "id": 11, "kind": "link", "value": "vless://...", "remark": "DE", "enable": true, "expiryTime": 0 },\n      { "id": 12, "kind": "subscription", "value": "https://provider.example/sub/abc", "remark": "Provider", "enable": false, "expiryTime": 1767225600000, "namePrefix": "[zjh] ", "lastFetchAt": 1767220000000, "lastFetchError": "" }\n    ]\n  }\n}',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/clients/get/tgId/:tgId',
+        summary:
+          'Fetch clients by Telegram user ID. Returns an array since multiple clients can share the same Telegram ID.',
+        params: [
+          { name: 'tgId', in: 'path', type: 'integer', desc: 'Telegram user ID (numeric).' },
+        ],
+        response:
+          '{\n  "success": true,\n  "obj": [\n    {\n      "client": { "id": 1, "email": "alice@example.com", ... },\n      "inboundIds": [3, 5],\n      "externalLinks": [],\n      "usedTraffic": 1048576\n    }\n  ]\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/add',
+        summary:
+          'Create a new client and attach it to one or more inbounds in a single call. Body is JSON. Per-protocol secrets are generated server-side when omitted, so callers can send only the universal fields.',
+        description:
+          'Fields the server fills in when they are omitted — a valid value sent by the caller is never overwritten. Re-adding an email that already exists, with its stored `subId`, reuses the stored `id`, `password`, `auth` and `secret` instead of minting new ones, so the identity stays in sync across its inbounds.\n\n- **VLESS / VMess** — `id`, a fresh UUID\n- **Trojan** — `password`\n- **Shadowsocks** — `password`. On a `2022-blake3-*` inbound a supplied password that does not base64-decode to the key length of the cipher (16 or 32 bytes) is replaced by a generated key and the call still succeeds, so read the client back if you did not let the server pick. Legacy ciphers keep any non-empty password\n- **Hysteria** — `auth`\n- **mtproto** — `secret`, a FakeTLS secret derived from the fronting domain of the inbound, or from `www.cloudflare.com` when it has none\n- **WireGuard** — `privateKey` and `publicKey` when both are blank, or `publicKey` alone when only a `privateKey` was sent, plus `allowedIPs`: one free `/32` taken from the /24 the existing peers of that inbound already sit in, or from `10.0.0.0/24` when it has none\n\nAccepted on the same body but never generated: `preSharedKey` and `keepAlive` (WireGuard), `adTag` (mtproto).\n\nWireGuard is the only one of these that can fail. Allocation widens the search to the containing /16 before giving up with `inbound <id>: wireguard: no free address available in <scope>`, and an `allowedIPs` supplied by the caller is validated instead of allocated: `inbound <id>: wireguard: allowedIPs entry <entry> overlaps <address> used by another client` when its range overlaps an address or prefix a different client of that same inbound holds, or `... used by a client on <inbound>` when the holder sits on another WireGuard or AmneziaWG inbound. Ranges are compared, not strings, so `10.0.0.9/24` collides with `10.0.0.5/32`; a `0.0.0.0/0` or `::/0` default route claims no address. Allocation likewise skips every address inside a prefix another client holds. The same validation runs on POST /panel/api/clients/{email}/attach, where a client that already carries an address brings it along.\n\nAn `inboundIds` entry that names no existing inbound rejects the whole call before anything is written. Past that, the inbounds are applied concurrently and independently: one that fails no longer stops the others, so a `success:false` response can still have created the client on the rest. Every error names the inbound it came from (`inbound 7: <message>`), and several failures are reported together, one per line. `limitHwid` is applied only when every inbound succeeded, so re-run the call after fixing the failure.',
+        params: [
+          {
+            name: 'client',
+            in: 'body (json)',
+            type: 'object',
+            desc: 'Client fields: email, subId, id (uuid), password, auth, flow, totalGB, expiryTime, limitIp, limitHwid, tgId (numeric Telegram user ID, 0 = none), comment, enable. Protocol-specific: secret and adTag (mtproto), privateKey, publicKey, preSharedKey, allowedIPs and keepAlive (WireGuard).',
+          },
+          {
+            name: 'inboundIds',
+            in: 'body (json)',
+            type: 'integer[]',
+            desc: 'Inbound IDs to attach the client to. At least one required.',
+          },
+        ],
+        body: '{\n  "client": {\n    "email": "alice@example.com",\n    "totalGB": 53687091200,\n    "expiryTime": 1735689600000,\n    "tgId": 0,\n    "limitIp": 0,\n    "limitHwid": 0,\n    "enable": true\n  },\n  "inboundIds": [3, 5]\n}',
+        response: '{\n  "success": true,\n  "msg": "Client added"\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/renewalPreview',
+        summary: 'Preview client auto-renewal dates without saving or resetting anything.',
+        description:
+          'Uses the same calendar and catch-up calculation as auto-renew in the panel timezone. resetWeekday is 1 (Monday) to 7 (Sunday), 0 disables weekly mode; it cannot be combined with positive reset or resetDay. Existing resetDay takes precedence over reset. With expiryTime=0, calendar modes suggest a first cutoff but do not activate renewal. Negative expiryTime waits for first-use activation. resetMax and resetCount simulate the existing per-period allowance limit; the preview is informational and does not reserve an allowance or guarantee node availability.',
+        params: [
+          {
+            name: 'expiryTime',
+            in: 'body (json)',
+            type: 'integer',
+            desc: 'Current cutoff in Unix milliseconds; 0 unlimited, negative first-use duration.',
+          },
+          {
+            name: 'reset',
+            in: 'body (json)',
+            type: 'integer',
+            desc: 'Fixed interval in days; 0 disabled.',
+          },
+          {
+            name: 'resetDay',
+            in: 'body (json)',
+            type: 'integer',
+            desc: 'Monthly calendar day 1-31; 0 disabled.',
+          },
+          {
+            name: 'resetWeekday',
+            in: 'body (json)',
+            type: 'integer',
+            desc: 'Weekly calendar day 1-7 (Monday-Sunday); 0 disabled.',
+          },
+          {
+            name: 'resetMax',
+            in: 'body (json)',
+            type: 'integer',
+            desc: 'Maximum renewals; 0 unlimited.',
+          },
+          {
+            name: 'resetCount',
+            in: 'body (json)',
+            type: 'integer',
+            desc: 'Renewals already consumed; defaults to 0.',
+          },
+        ],
+        responseSchema: 'ClientRenewalPreview',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/update/:email',
+        summary:
+          'Update an existing client by email. Changes propagate to every attached inbound. Body is the JSON client payload — supply the full set of fields you want to keep (the server replaces the row, it does not patch).',
+        description:
+          'The inbounds are applied concurrently and independently: one that fails no longer stops the others. Every inbound error names the inbound it came from (`inbound 7: <message>`), and several failures are reported together, one per line. So a `success:false` response can still have applied the edit to the remaining inbounds. The client record is written after the inbounds, so a failure there is reported without an `inbound <id>:` prefix and leaves the inbound edits in place.',
+        params: [
+          {
+            name: 'email',
+            in: 'path',
+            type: 'string',
+            desc: 'Current client email (unique identifier).',
+          },
+        ],
+        body: '{\n  "email": "alice@example.com",\n  "totalGB": 107374182400,\n  "expiryTime": 1767225600000,\n  "limitHwid": 2,\n  "tgId": 123456789,\n  "enable": true\n}',
+        response: '{\n  "success": true,\n  "msg": "Client updated"\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/del/:email',
+        summary:
+          'Delete a client by email. Removes it from every attached inbound and drops its traffic record unless keepTraffic=1 is passed.',
+        description:
+          'The inbounds are applied concurrently and independently: one that fails no longer stops the others. Every inbound error names the inbound it came from (`inbound 7: <message>`), and several failures are reported together, one per line. So a `success:false` response can still have removed the client from the remaining inbounds; the client record is kept in that case, so re-running the call retries exactly the leftovers. The record and traffic rows are dropped after the inbounds, so a failure there is reported without an `inbound <id>:` prefix and leaves the client already removed from every inbound.',
+        params: [
+          { name: 'email', in: 'path', type: 'string', desc: 'Client email (unique identifier).' },
+          {
+            name: 'keepTraffic',
+            in: 'query',
+            type: 'integer',
+            desc: 'Pass 1 to retain the xray_client_traffic row after deletion.',
+          },
+        ],
+        response: '{\n  "success": true,\n  "msg": "Client deleted"\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/:email/attach',
+        summary: 'Attach an existing client to one or more additional inbounds. Body is JSON.',
+        description:
+          'A WireGuard client brings its stored `allowedIPs` into the new inbound instead of being given a fresh address, so the call fails with `inbound <id>: wireguard: allowedIPs entry <entry> overlaps <address> used by another client` when its range overlaps an address or prefix a different client of the target inbound holds. Free the address on that inbound first — see POST /panel/api/clients/add for the full rule. Inbounds are applied independently, so the remaining ones are still attached and a `success:false` response can be partial.',
+        params: [
+          { name: 'email', in: 'path', type: 'string', desc: 'Client email (unique identifier).' },
+          {
+            name: 'inboundIds',
+            in: 'body (json)',
+            type: 'integer[]',
+            desc: 'Inbound IDs to attach.',
+          },
+        ],
+        body: '{\n  "inboundIds": [7, 9]\n}',
+        response: '{\n  "success": true\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/:email/detach',
+        summary: 'Detach a client from one or more inbounds without deleting the client.',
+        description:
+          'The inbounds are applied concurrently and independently: one that fails no longer stops the others. Every inbound error names the inbound it came from (`inbound 7: <message>`), and several failures are reported together, one per line. So a `success:false` response can still have detached the remaining inbounds. Detach writes nothing beyond the inbounds, so every error carries the prefix.',
+        params: [
+          { name: 'email', in: 'path', type: 'string', desc: 'Client email (unique identifier).' },
+          {
+            name: 'inboundIds',
+            in: 'body (json)',
+            type: 'integer[]',
+            desc: 'Inbound IDs to detach.',
+          },
+        ],
+        body: '{\n  "inboundIds": [5]\n}',
+        response: '{\n  "success": true\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/:email/externalLinks',
+        summary:
+          "Replace a client's external links and external subscriptions. Sends the full set; the server replaces all rows. Disabled rows stay saved for editing but are not emitted in generated subscriptions. The owning client's disabled or expired state also stops these rows from being emitted on future subscription fetches; credentials already imported by an app remain valid until the external provider revokes them.",
+        params: [
+          { name: 'email', in: 'path', type: 'string', desc: 'Client email (unique identifier).' },
+          {
+            name: 'externalLinks',
+            in: 'body',
+            type: 'object[]',
+            desc: "Full replacement list; the server replaces all rows. Each row supports { kind, value, remark, enable, expiryTime, namePrefix }. kind=link: value must be a supported share link such as vless://, vmess://, trojan://, ss://, hysteria2://, or wireguard://, and remark overrides the exported node name. kind=subscription: value must be an http(s) subscription URL, and namePrefix is prepended to fetched node names. Omit enable to default true; enable=false or an expired expiryTime keeps the row saved but excludes it from generated subscriptions. expiryTime is a unix millisecond timestamp where 0 means no link-specific expiry; the owning client's enabled state and expiry still apply. A negative value is rejected. Rows are matched by kind+value across saves, so id is ignored on write. lastFetchAt and lastFetchError are read-only status fields returned by GET.",
+          },
+        ],
+        body: '{\n  "externalLinks": [\n    { "kind": "link", "value": "vless://uuid@host:443?...#srv", "remark": "DE", "enable": true, "expiryTime": 0 },\n    { "kind": "subscription", "value": "https://provider.example/sub/abc", "remark": "Provider", "enable": false, "expiryTime": 1767225600000, "namePrefix": "[zjh] " }\n  ]\n}',
+        response: '{\n  "success": true\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/resetAllTraffics',
+        summary:
+          'Reset the up/down counters for every client globally. Quotas and expiry are not affected. Triggers an Xray restart if any counter actually moved.',
+        response: '{\n  "success": true\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/delDepleted',
+        summary:
+          'Delete every client whose traffic quota is exhausted (used >= total, when reset is disabled) or whose expiry has passed. Returns the deleted count and triggers an Xray restart when any client was on a running inbound.',
+        response: '{\n  "success": true,\n  "obj": {\n    "deleted": 0\n  }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/delOrphans',
+        summary:
+          'Delete every client that is not attached to any inbound, along with its traffic record, IP log, HWID devices, and external links. Useful for clearing clients left unattached after their inbounds were removed. Returns the deleted count. Cannot be undone.',
+        response: '{\n  "success": true,\n  "obj": {\n    "deleted": 0\n  }\n}',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/clients/export',
+        summary:
+          'Return every client as a {client, inboundIds, traffic} array — the shape /import accepts — so the payload round-trips straight back through /import. traffic carries the usage counters (up, down, resetCount, lastOnline, lastSubFetch) and is omitted for a client with no traffic row; the quota itself stays in client.totalGB. Clients with no inbound attachment are included with an empty inboundIds list. The UI shows this in a CodeMirror viewer (copy / download); programmatic callers get the array in obj.',
+        response:
+          '{\n  "success": true,\n  "obj": [\n    {\n      "client": {\n        "email": "alice@example.com",\n        "id": "...",\n        "totalGB": 53687091200,\n        "expiryTime": 0,\n        "limitHwid": 2,\n        "enable": true,\n        "subId": "..."\n      },\n      "inboundIds": [7, 9],\n      "traffic": {\n        "up": 1048576,\n        "down": 2097152,\n        "resetCount": 0,\n        "lastOnline": 1735680000000\n      }\n    }\n  ]\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/import',
+        summary:
+          'Import clients from a JSON body { "data": "<json>" }, where data is a string-encoded array produced by /export ([{client, inboundIds, traffic}]). Items with inboundIds are created and attached to those inbounds; items with an empty inboundIds list are restored as unattached client records. An optional traffic object restores the usage counters, only for clients this import creates. Existing emails are never overwritten — they are returned in skipped, and their live counters are left untouched. Triggers a single Xray restart at the end if any target inbound was running; a failure while restoring counters still reports success=false after the clients were created.',
+        body: '{\n  "data": "[{\\"client\\":{\\"email\\":\\"alice@example.com\\",\\"enable\\":true},\\"inboundIds\\":[7]}]"\n}',
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "created": 2,\n    "skipped": [\n      { "email": "alice@example.com", "reason": "email already in use: alice@example.com" }\n    ]\n  }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/bulkAdjust',
+        summary:
+          'Shift expiry and/or traffic quota for many clients in one call. addDays/addBytes may be negative. Clients with unlimited expiry (expiryTime=0) or unlimited traffic (totalGB=0) are skipped for the corresponding field — bulk extend never converts unlimited to limited. A client that was auto-disabled solely because it was depleted (expired or over quota) is automatically re-enabled — locally and on its node — when the adjustment lifts it out of depletion; a manually-disabled or still-depleted client is left disabled. The optional flow directive sets the XTLS flow on every client: "none" clears it, "xtls-rprx-vision"/"xtls-rprx-vision-udp443" set it where the inbound supports it (omit or "" to leave it unchanged). The optional limitHwid sets maximum registered devices (0 = unlimited). The optional adTag sets MTProto Telegram sponsor channel ("none" clears). Returns the adjusted count and per-email skip reasons.',
+        body: '{\n  "emails": ["alice", "bob"],\n  "addDays": 30,\n  "addBytes": 53687091200,\n  "flow": "xtls-rprx-vision",\n  "limitHwid": 2,\n  "adTag": "0123456789abcdef0123456789abcdef"\n}',
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "adjusted": 2,\n    "skipped": [\n      { "email": "carol", "reason": "unlimited expiry" }\n    ]\n  }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/bulkEnable',
+        summary:
+          'Enable many clients in one call. Emails are grouped by inbound and applied with a single read-modify-write per inbound; the running Xray (local or remote node) is updated to add each user. Note that enabling a client whose quota is exhausted or whose expiry has passed only flips the flag — the traffic loop will disable it again on the next tick. Returns the changed count and per-email skip reasons.',
+        body: '{\n  "emails": ["alice", "bob"]\n}',
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "changed": 2,\n    "skipped": [\n      { "email": "carol", "reason": "client not found" }\n    ]\n  }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/bulkDisable',
+        summary:
+          'Disable many clients in one call. Emails are grouped by inbound and applied with a single read-modify-write per inbound; the running Xray (local or remote node) is updated to remove each user. Returns the changed count and per-email skip reasons.',
+        body: '{\n  "emails": ["alice", "bob"]\n}',
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "changed": 2,\n    "skipped": [\n      { "email": "carol", "reason": "client not found" }\n    ]\n  }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/bulkDel',
+        summary:
+          'Delete many clients in one call. The server processes the list sequentially so each delete sees the committed state of the previous one — avoids the race the per-email fan-out had on the panel side. Pass keepTraffic=true to retain the xray_client_traffic rows after deletion.',
+        body: '{\n  "emails": ["alice", "bob"],\n  "keepTraffic": false\n}',
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "deleted": 2,\n    "skipped": [\n      { "email": "carol", "reason": "client not found" }\n    ]\n  }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/bulkCreate',
+        summary:
+          'Create many clients in one call. Body is a JSON array of {client, inboundIds} payloads — the same shape /add accepts. Items are processed sequentially; per-email skip reasons are returned for items that fail (e.g., duplicate email). Triggers a single Xray restart at the end if any inbound was running.',
+        body: '[\n  {\n    "client": {\n      "email": "alice@example.com",\n      "totalGB": 53687091200,\n      "expiryTime": 0,\n      "limitHwid": 2,\n      "enable": true\n    },\n    "inboundIds": [7]\n  },\n  {\n    "client": {\n      "email": "bob@example.com",\n      "totalGB": 53687091200,\n      "expiryTime": 0,\n      "limitHwid": 0,\n      "enable": true\n    },\n    "inboundIds": [7, 9]\n  }\n]',
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "created": 2,\n    "skipped": [\n      { "email": "alice@example.com", "reason": "email already in use" }\n    ]\n  }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/groups/bulkAdd',
+        summary:
+          "Add many clients to a group in one call. Updates clients.group_name and patches the matching client entry inside every owning inbound's settings JSON in a single transaction. If the group name does not yet exist (in client_groups or as a derived label), it is auto-created as a persistent group. To clear the group label, use /groups/bulkRemove instead.",
+        body: '{\n  "emails": ["alice", "bob"],\n  "group": "customer-a"\n}',
+        response: '{\n  "success": true,\n  "obj": {\n    "affected": 2\n  }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/groups/bulkRemove',
+        summary:
+          "Clear the group label on many clients in one call. Inverse of /groups/bulkAdd. Clients themselves are kept — only the group label is cleared from clients.group_name and from each owning inbound's settings JSON. Groups become empty if all their members are removed.",
+        body: '{\n  "emails": ["alice", "bob"]\n}',
+        response: '{\n  "success": true,\n  "obj": {\n    "affected": 2\n  }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/bulkAttach',
+        summary:
+          'Attach many existing clients to many inbounds in one call. Each client keeps its identity (email/UUID/password/subId) and a shared traffic row; all clients are added to a target inbound in a single AddInboundClient call. Clients already present on a target are reported under skipped. Returns per-email attached/skipped/errors lists and triggers a single Xray restart if any target inbound was running.',
+        params: [
+          {
+            name: 'emails',
+            in: 'body (json)',
+            type: 'string[]',
+            desc: 'Emails of existing clients to attach.',
+          },
+          {
+            name: 'inboundIds',
+            in: 'body (json)',
+            type: 'integer[]',
+            desc: 'Target inbound IDs to attach every client to.',
+          },
+        ],
+        body: '{\n  "emails": ["alice", "bob"],\n  "inboundIds": [7, 9]\n}',
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "attached": ["alice", "bob"],\n    "skipped": ["bob"],\n    "errors": []\n  }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/bulkDetach',
+        summary:
+          "Mirror of bulkAttach: detach many existing clients from many inbounds in one call. For each email, intersects the client's current inbounds with the requested set and detaches from those only; (email, inbound) pairs where the client is not currently attached are silently no-ops. Emails not attached to any of the requested inbounds are reported under skipped. Client records are kept even if they become orphaned — use bulkDel for full removal. Returns per-email detached/skipped/errors lists and triggers a single Xray restart if any target inbound was running.",
+        params: [
+          {
+            name: 'emails',
+            in: 'body (json)',
+            type: 'string[]',
+            desc: 'Emails of existing clients to detach.',
+          },
+          {
+            name: 'inboundIds',
+            in: 'body (json)',
+            type: 'integer[]',
+            desc: 'Inbound IDs to detach the clients from.',
+          },
+        ],
+        body: '{\n  "emails": ["alice", "bob"],\n  "inboundIds": [7, 9]\n}',
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "detached": ["alice", "bob"],\n    "skipped": [],\n    "errors": []\n  }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/bulkResetTraffic',
+        summary:
+          'Zero up/down counters for many clients in one call. Loops the single-reset path so each client is re-enabled across its attached inbounds and pushed to Xray/remote nodes. Returns the count of successfully reset clients.',
+        body: '{\n  "emails": ["alice", "bob"]\n}',
+        response: '{\n  "success": true,\n  "obj": {\n    "affected": 2\n  }\n}',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/clients/groups',
+        summary:
+          'List all client groups with their member counts. Merges persisted groups (rows in client_groups, including empty placeholders) with the distinct group_name values currently set on clients. Sorted alphabetically (case-insensitive).',
+        response:
+          '{\n  "success": true,\n  "obj": [\n    { "name": "customer-a", "clientCount": 5 },\n    { "name": "internal", "clientCount": 0 }\n  ]\n}',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/clients/groups/:name/emails',
+        summary:
+          'Return just the email list of clients that currently belong to the given group. Useful for fanning a single bulk action over an entire group without round-tripping the full client list.',
+        params: [{ name: 'name', in: 'path', type: 'string', desc: 'Group name (URL-encoded).' }],
+        response: '{\n  "success": true,\n  "obj": ["alice", "bob", "carol"]\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/groups/create',
+        summary:
+          'Create a new empty (placeholder) group. The group becomes selectable in client forms and the filter drawer even before any client is added to it. Errors if a group with the same name already exists.',
+        body: '{\n  "name": "customer-a"\n}',
+        response: '{\n  "success": true,\n  "obj": {\n    "name": "customer-a"\n  }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/groups/rename',
+        summary:
+          "Rename a group. The new name is applied to the client_groups row AND propagated to every matching client (both clients.group_name and the client entry inside every owning inbound's settings JSON) in a single transaction. Returns the number of clients whose label was updated.",
+        body: '{\n  "oldName": "customer-a",\n  "newName": "tier-1"\n}',
+        response: '{\n  "success": true,\n  "obj": {\n    "affected": 5\n  }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/groups/delete',
+        summary:
+          'Remove a group. Deletes the client_groups row and clears the group label from every matching client (both clients.group_name and the inbound settings JSON). The clients themselves are NOT deleted — use /bulkDel after filtering by group for that. Returns the count of clients whose label was cleared.',
+        body: '{\n  "name": "customer-a"\n}',
+        response: '{\n  "success": true,\n  "obj": {\n    "affected": 5\n  }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/groups/resetTraffic',
+        summary:
+          "Reset only the group-level traffic counter shown on the groups page. Snapshots the current up/down sum of the group's members as a baseline so the group total reads zero, while leaving each client's own counters (and their quotas) untouched. No Xray restart is triggered. Creates the client_groups row if the group exists only as a derived label.",
+        body: '{\n  "name": "customer-a"\n}',
+        response: '{\n  "success": true,\n  "obj": {\n    "name": "customer-a"\n  }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/resetTraffic/:email',
+        summary:
+          'Zero out a single client’s up/down counters. Re-enables the client across every attached inbound and pushes the change to Xray (or the remote node) so depleted users can connect again immediately.',
+        params: [{ name: 'email', in: 'path', type: 'string', desc: 'Client email.' }],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/updateTraffic/:email',
+        summary:
+          'Manually adjust a client’s upload + download counters. Useful for migrations from external accounting systems.',
+        params: [{ name: 'email', in: 'path', type: 'string', desc: 'Client email.' }],
+        body: '{\n  "upload": 1073741824,\n  "download": 5368709120\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/ips/:email',
+        summary:
+          'List source IPs that have connected with the given client’s credentials. Returns an array of "ip (timestamp)" strings.',
+        params: [{ name: 'email', in: 'path', type: 'string', desc: 'Client email.' }],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/clearIps/:email',
+        summary: 'Reset the recorded IP list for a client.',
+        params: [{ name: 'email', in: 'path', type: 'string', desc: 'Client email.' }],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/hwids/:email',
+        summary:
+          'List registered HWID devices for a client with a short fingerprint. Full hashes are not exposed.',
+        params: [{ name: 'email', in: 'path', type: 'string', desc: 'Client email.' }],
+        response:
+          '{\n  "success": true,\n  "obj": [\n    {\n      "id": 1,\n      "firstSeen": 1735000000000,\n      "lastSeen": 1735100000000,\n      "userAgent": "Happ/1.0",\n      "deviceOs": "android",\n      "osVersion": "15",\n      "deviceModel": "Pixel 9",\n      "fingerprint": "6ad17c93e821"\n    }\n  ]\n}',
+      },
+      {
+        method: 'DELETE',
+        path: '/panel/api/clients/hwids/:email',
+        summary:
+          'Clear all registered HWID devices for a client so new devices can register again.',
+        params: [{ name: 'email', in: 'path', type: 'string', desc: 'Client email.' }],
+      },
+      {
+        method: 'DELETE',
+        path: '/panel/api/clients/hwids/:email/:id',
+        summary:
+          'Remove a single registered HWID device by its id, freeing one slot under the HWID limit.',
+        params: [
+          { name: 'email', in: 'path', type: 'string', desc: 'Client email.' },
+          { name: 'id', in: 'path', type: 'number', desc: 'Device id, from the list endpoint.' },
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/onlines',
+        summary:
+          'List the emails of currently connected clients (last seen within the heartbeat window), deduped across every node.',
+        response: '{\n  "success": true,\n  "obj": ["user1", "user2"]\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/onlinesByGuid',
+        summary:
+          'Online client emails grouped by the panelGuid of the node that physically hosts each client. The local panel uses its own GUID; each node (at any depth in a chain) uses its GUID. Lets the inbounds page attribute online status to the real node instead of the intermediate one it syncs through.',
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "a1b2-...": ["user1"],\n    "c3d4-...": ["user1", "user2"]\n  }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/clientIpsByGuid',
+        summary:
+          'Per-client source IPs grouped by the panelGuid of the node that observed them. Lets the central panel attribute and enforce per-client IP limits using the real visitor IPs each node sees, instead of the address of the intermediate panel it syncs through.',
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "a1b2-...": {\n      "user1": [\n        { "ip": "1.2.3.4", "timestamp": 1700000000 }\n      ]\n    }\n  }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/activeInbounds',
+        summary:
+          "Inbound tags that carried traffic within the heartbeat window, grouped by the hosting node's panelGuid. Pairs with onlinesByGuid so the inbounds page only marks a multi-inbound client online on the inbounds it actually used. Nodes that do not report per-inbound activity are absent.",
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "a1b2-...": ["in-443-tcp", "in-8443-tcp"]\n  }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/lastOnline',
+        summary: 'Map of client email → last-seen unix timestamp.',
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "user1": 1700000000,\n    "user2": 1699999000\n  }\n}',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/clients/traffic/:email',
+        summary: 'Traffic counters for a client identified by email.',
+        params: [
+          {
+            name: 'email',
+            in: 'path',
+            type: 'string',
+            desc: 'Client email (unique across the panel).',
+          },
+        ],
+        responseSchema: 'ClientTraffic',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/clients/subLinks/:subId',
+        summary:
+          'Return every protocol URL (vless://, vmess://, trojan://, ss://, hysteria://, hy2://) for clients matching the subscription ID. Same result set as the configured subPath endpoint, but as a JSON array — no base64. When an inbound has streamSettings.externalProxy set, one URL is emitted per external proxy. Empty array when the subId has no enabled clients.',
+        params: [
+          {
+            name: 'subId',
+            in: 'path',
+            type: 'string',
+            desc: "Subscription ID, taken from the client's subId field.",
+          },
+        ],
+        response:
+          '{\n  "success": true,\n  "obj": [\n    "vless://uuid@host:443?security=reality&...#user1",\n    "vmess://eyJ2IjoyLC..."\n  ]\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/clients/happLink/:id',
+        summary:
+          'Generate a fresh Happ crypt5 link locally from the current client subscription URL when Happ link generation is enabled. The panel applies a resource limit of 8192 UTF-8 bytes to the source URL; this is not a Happ client maximum. Longer sources return success: false with msg: happ_source_too_long and obj: null. The source URL is not sent to a generation provider, and the result is not stored or reused.',
+        params: [{ name: 'id', in: 'path', type: 'integer', desc: 'Stable client record ID.' }],
+        responseSchema: 'HappLinkResult',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/clients/awgBody/:subId',
+        summary:
+          'LUCX-UI only. Same-origin Amnezia subscription body for panel Copy/QR (avoids CORS on the public /awg/ port). format=vpn → vpn:// lines; format=conf → awg-quick .conf. JSON envelope obj.body.',
+        params: [
+          {
+            name: 'subId',
+            in: 'path',
+            type: 'string',
+            desc: "Subscription ID from the client's subId field.",
+          },
+          {
+            name: 'format',
+            in: 'query',
+            type: 'string',
+            optional: true,
+            desc: 'vpn (default) or conf.',
+          },
+          {
+            name: 'inboundId',
+            in: 'query',
+            type: 'integer',
+            optional: true,
+            desc: 'When set, return only this AWG inbound (one vpn:// / .conf). Omit for every attached inbound.',
+          },
+        ],
+        response:
+          '{\n  "success": true,\n  "obj": { "body": "vpn://BASE64…\\n", "format": "vpn" }\n}',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/clients/subBody',
+        summary:
+          'LUCX-UI only. Same-origin body of any public subscription URL (base64 sub, JSON, Clash YAML, Amnezia .conf / vpn://) for panel Download/Copy — the sub server has no CORS headers, so browsers cannot fetch it cross-origin. Only path+query of the submitted url are used; the request goes to the local sub server, byte-identical to what VPN apps receive. JSON envelope obj.body.',
+        params: [
+          {
+            name: 'url',
+            in: 'query',
+            type: 'string',
+            desc: 'The public subscription URL shown in the panel (sub/json/clash/awg route).',
+          },
+        ],
+        response:
+          '{\n  "success": true,\n  "obj": { "body": "dmxlc3M6Ly8…\\n", "format": "sub" }\n}',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/clients/tunnelCreds/:inboundId/:email',
+        summary:
+          'LUCX-UI only. Username/password a NaiveProxy, mieru or TrustTunnel client has to type in. The pair is HMAC-derived from the panel secret and stored nowhere, so this is the only way to read it back. Errors for any other protocol, for a client not attached to the inbound, and for a disabled client (the sidecar drops its credentials line).',
+        params: [
+          {
+            name: 'inboundId',
+            in: 'path',
+            type: 'integer',
+            desc: 'Inbound the credentials are scoped to.',
+          },
+          { name: 'email', in: 'path', type: 'string', desc: 'Client email (identifier).' },
+        ],
+        response:
+          '{\n  "success": true,\n  "obj": { "protocol": "trusttunnel", "username": "tr9f2c1ab0de", "password": "kQ8mZ2rC7wN4tX1vB6yH3sL0pJd" }\n}',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/clients/links/:email',
+        summary:
+          'Return every URL for one client across all attached inbounds, one per advertised endpoint: the managed hosts of the inbound, else its streamSettings.externalProxy entries, else its own address. Supported protocols: vmess, vless, trojan, shadowsocks, hysteria, mtproto. Protocols without a URL form (socks, http, mixed, wireguard, dokodemo, tunnel) contribute nothing.',
+        params: [
+          { name: 'email', in: 'path', type: 'string', desc: 'Client email (unique identifier).' },
+        ],
+        response:
+          '{\n  "success": true,\n  "obj": [\n    "vless://uuid@host:443?...#user1"\n  ]\n}',
+      },
+    ],
+  },
+
+  {
+    id: 'nodes',
+    title: 'Nodes',
+    description:
+      'Manage remote 3x-ui panels acting as nodes for a central panel. All endpoints under /panel/api/nodes.',
+    endpoints: [
+      {
+        method: 'GET',
+        path: '/panel/api/nodes/list',
+        summary:
+          'List every configured node with its connection details, health, and last heartbeat patch.',
+        responseSchema: 'NodeView',
+        responseSchemaArray: true,
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/nodes/mtls/ca',
+        summary:
+          "This panel's node-auth CA certificate (public, PEM) to paste into a node's mTLS trust setting. Lazily mints the CA and the master client cert on first call. Pair with setting tlsVerifyMode=mtls on the node.",
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "caCert": "-----BEGIN CERTIFICATE-----\\n...\\n-----END CERTIFICATE-----\\n"\n  }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/nodes/mtls/trustCA',
+        summary:
+          "Set the CA certificate this panel trusts for incoming node-API client certificates (this panel acting as a node). Paste the managing panel's CA (from nodes/mtls/ca). An empty caCert disables it. A non-empty value must be a PEM certificate. Applied on the next panel restart.",
+        body: '{\n  "caCert": "-----BEGIN CERTIFICATE-----\\n...\\n-----END CERTIFICATE-----\\n"\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/nodes/mtls/reloadClient',
+        summary:
+          'Validate the stored master mTLS client credential and invalidate cached transports. Each transport closes its old idle pool and rebuilds with the rotated certificate before its next request.',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/nodes/get/:id',
+        summary: 'Fetch a single node by ID.',
+        params: [{ name: 'id', in: 'path', type: 'number', desc: 'Node ID.' }],
+        responseSchema: 'NodeView',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/nodes/webCert/:id',
+        summary:
+          'Fetch a node\'s own web TLS certificate/key file paths (proxied to the node). Used by the inbound form\'s "Set Cert from Panel" so a node-assigned inbound gets paths that exist on the node, not the central panel.',
+        params: [{ name: 'id', in: 'path', type: 'number', desc: 'Node ID.' }],
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "webCertFile": "/root/cert/example.com/fullchain.pem",\n    "webKeyFile": "/root/cert/example.com/privkey.pem"\n  }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/nodes/add',
+        summary:
+          'Register a new remote node. Provide its URL, write-only apiToken, and optional remark / allowPrivateAddress flag. Responses expose hasApiToken only.',
+        body: '{\n  "name": "de-fra-1",\n  "remark": "",\n  "scheme": "https",\n  "address": "node1.example.com",\n  "port": 2053,\n  "basePath": "/",\n  "apiToken": "abcdef...",\n  "clearApiToken": false,\n  "enable": true,\n  "allowPrivateAddress": false\n}',
+        responseSchema: 'NodeView',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/nodes/update/:id',
+        summary:
+          'Replace a node\u2019s connection details. apiToken is write-only: omit it or send an empty string to keep the stored token; set clearApiToken=true to clear it.',
+        params: [{ name: 'id', in: 'path', type: 'number', desc: 'Node ID.' }],
+        body: '{\n  "name": "de-fra-1",\n  "remark": "",\n  "scheme": "https",\n  "address": "node1.example.com",\n  "port": 2053,\n  "basePath": "/",\n  "apiToken": "",\n  "clearApiToken": false,\n  "enable": true,\n  "allowPrivateAddress": false\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/nodes/del/:id',
+        summary: 'Delete a node. Inbounds bound to it are not auto-migrated.',
+        params: [{ name: 'id', in: 'path', type: 'number', desc: 'Node ID.' }],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/nodes/setEnable/:id',
+        summary: 'Pause or resume traffic sync with this node.',
+        params: [{ name: 'id', in: 'path', type: 'number', desc: 'Node ID.' }],
+        body: '{\n  "enable": true\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/nodes/test',
+        summary:
+          'Probe a node without saving it. Uses the body as connection details and returns the same heartbeat snapshot a registered node would have.',
+        body: '{\n  "scheme": "https",\n  "address": "node1.example.com",\n  "port": 2053,\n  "basePath": "/",\n  "apiToken": "abcdef..."\n}',
+        responseSchema: 'ProbeResultUI',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/nodes/certFingerprint',
+        summary:
+          "Connect to the node over HTTPS without verifying its certificate and return the leaf certificate's SHA-256 (base64). Used by the Add/Edit Node dialog to fetch and pin a self-signed certificate. Uses the same body as /test.",
+        body: '{\n  "scheme": "https",\n  "address": "node1.example.com",\n  "port": 2053,\n  "basePath": "/"\n}',
+        response: '{\n  "success": true,\n  "obj": "k3b1...base64-sha256...="\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/nodes/inbounds',
+        summary:
+          'Use unsaved node connection details to list the remote inbounds available for selective import.',
+        body: '{\n  "name": "de-fra-1",\n  "scheme": "https",\n  "address": "node1.example.com",\n  "port": 2053,\n  "basePath": "/",\n  "apiToken": "abcdef..."\n}',
+        response:
+          '{\n  "success": true,\n  "obj": [\n    { "tag": "inbound-443", "remark": "VLESS", "protocol": "vless", "port": 443 }\n  ]\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/nodes/probe/:id',
+        summary: 'Probe an existing node, updating its cached health state.',
+        params: [{ name: 'id', in: 'path', type: 'number', desc: 'Node ID.' }],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/nodes/updatePanel',
+        summary:
+          'Trigger the official panel self-updater on each given node (downloads the latest release and restarts). Only enabled, online nodes are updated; offline/disabled ones are reported as skipped. Set "dev": true to move the nodes to the rolling per-commit dev channel instead of the latest stable release. Returns a per-node result list.',
+        body: '{\n  "ids": [1, 2, 3],\n  "dev": false\n}',
+        response:
+          '{\n  "success": true,\n  "obj": [\n    { "id": 1, "name": "de-1", "ok": true },\n    { "id": 2, "name": "fr-1", "ok": false, "error": "node is offline" }\n  ]\n}',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/nodes/history/:id/:metric/:bucket',
+        summary:
+          'Aggregated metric history for a node — same shape as /server/history, scoped to one node.',
+        params: [
+          { name: 'id', in: 'path', type: 'number', desc: 'Node ID.' },
+          { name: 'metric', in: 'path', type: 'string', desc: 'cpu | mem.' },
+          {
+            name: 'bucket',
+            in: 'path',
+            type: 'number',
+            desc: 'Bucket size in seconds. Allowed: 2, 30, 60, 120, 180, 300.',
+          },
+        ],
+      },
+    ],
+  },
+
+  {
+    id: 'hosts',
+    title: 'Hosts',
+    description:
+      'Per-inbound override endpoints. Each enabled host renders one extra subscription link/proxy with its own address/port/TLS, superseding the legacy externalProxy array. All endpoints under /panel/api/hosts.',
+    endpoints: [
+      {
+        method: 'GET',
+        path: '/panel/api/hosts/list',
+        summary:
+          'List every host across all inbounds, grouped by inbound then ordered by sort order.',
+        responseSchema: 'HostGroup',
+        responseSchemaArray: true,
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/hosts/get/:groupId',
+        summary: 'Fetch a single host group by Group ID.',
+        params: [{ name: 'groupId', in: 'path', type: 'string', desc: 'Host Group ID.' }],
+        responseSchema: 'HostGroup',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/hosts/byInbound/:inboundId',
+        summary: "Fetch one inbound's hosts, grouped by host group.",
+        params: [{ name: 'inboundId', in: 'path', type: 'number', desc: 'Inbound ID.' }],
+        responseSchema: 'HostGroup',
+        responseSchemaArray: true,
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/hosts/tags',
+        summary: 'Distinct, sorted set of tags used across all hosts.',
+        response: '{\n  "success": true,\n  "obj": ["CDN", "EU", "FAST"]\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/hosts/add',
+        summary: 'Create a host group on inbounds.',
+        body: '{\n  "inboundIds": [1],\n  "remark": "cdn-front",\n  "hosts": ["cdn.example.com"],\n  "port": 8443,\n  "security": "same",\n  "tags": ["CDN"]\n}',
+        responseSchema: 'Host',
+        responseSchemaArray: true,
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/hosts/update/:groupId',
+        summary: 'Replace a host group’s content.',
+        params: [{ name: 'groupId', in: 'path', type: 'string', desc: 'Host Group ID.' }],
+        body: '{\n  "inboundIds": [1],\n  "remark": "cdn-front",\n  "hosts": ["cdn.example.com"],\n  "port": 8443,\n  "security": "same",\n  "tags": ["CDN"]\n}',
+        responseSchema: 'Host',
+        responseSchemaArray: true,
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/hosts/del/:groupId',
+        summary: 'Delete a host group.',
+        params: [{ name: 'groupId', in: 'path', type: 'string', desc: 'Host Group ID.' }],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/hosts/setEnable/:groupId',
+        summary: 'Enable or disable a host group.',
+        params: [{ name: 'groupId', in: 'path', type: 'string', desc: 'Host Group ID.' }],
+        body: '{\n  "enable": true\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/hosts/reorder',
+        summary: 'Set host group sort order by the position of each groupId in the array.',
+        body: '{\n  "ids": ["abc-123", "def-456"]\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/hosts/bulk/add',
+        summary: 'Add a host group to inbounds (same as /add).',
+        body: '{\n  "inboundIds": [1, 2],\n  "hosts": ["cdn.example.com", "cdn2.example.com:443"],\n  "remark": "Cloudflare CDN",\n  "port": 0,\n  "security": "same",\n  "isDisabled": false\n}',
+        responseSchema: 'Host',
+        responseSchemaArray: true,
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/hosts/bulk/setEnable',
+        summary: 'Enable or disable many host groups in one call.',
+        body: '{\n  "ids": ["abc-123", "def-456"],\n  "enable": false\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/hosts/bulk/del',
+        summary: 'Delete many host groups in one call.',
+        body: '{\n  "ids": ["abc-123", "def-456"]\n}',
+      },
+    ],
+  },
+
+  {
+    id: 'backup',
+    title: 'Backup',
+    description: 'Operations that interact with the configured Telegram bot.',
+    endpoints: [
+      {
+        method: 'POST',
+        path: '/panel/api/backuptotgbot',
+        summary:
+          'Send a fresh DB backup to every Telegram chat configured as an admin recipient. No body, no params.',
+      },
+    ],
+  },
+
+  {
+    id: 'settings',
+    title: 'Settings',
+    description:
+      'Panel configuration and user credentials. All endpoints live under /panel/api/setting and require a logged-in session or Bearer token.',
+    endpoints: [
+      {
+        method: 'POST',
+        path: '/panel/api/setting/all',
+        summary:
+          'Return every panel setting: web server, Telegram bot, subscription, security, LDAP. The full JSON blob that the Settings page edits.',
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "webPort": 2053,\n    "webCertFile": "",\n    "webKeyFile": "",\n    "webBasePath": "/",\n    "subPort": 10882,\n    "subPath": "/sub/",\n    "subClashAutoDetect": false,\n    "subClashUserAgentRegex": "",\n    "subJsonEnable": false,\n    "subJsonAutoDetect": false,\n    "subJsonAlwaysArray": false,\n    "subJsonUserAgentRegex": "",\n    "subJsonPath": "/json/",\n    "subJsonURI": "https://sub.example.com/json/",\n    "subClashEnable": true,\n    "subClashPath": "/clash/",\n    "subClashURI": "https://sub.example.com/clash/",\n    "tgBotEnable": false,\n    "tgBotToken": "",\n    ...\n  }\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/setting/defaultSettings',
+        summary:
+          'Return the computed default settings based on the request host. Useful to preview what a fresh install would use.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/setting/factoryDefaults',
+        summary:
+          'Return the shipped (factory) default value per browser-safe setting key, so clients can tell a stored value apart from the default it would fall back to. Per-install material (secret, panelGuid, mTLS keys) and credential fields are never included.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/setting/update',
+        summary:
+          'Persist every setting at once. The body mirrors the shape returned by /all. Invalid values (bad ports, missing cert pairs, etc.) are rejected before write.',
+        body: '{\n  "webPort": 2053,\n  "webBasePath": "/",\n  "subPort": 10882,\n  "subPath": "/sub/",\n  "subClashAutoDetect": false,\n  "subClashUserAgentRegex": "",\n  "subJsonEnable": false,\n  "subJsonAutoDetect": false,\n  "subJsonAlwaysArray": false,\n  "subJsonUserAgentRegex": "",\n  "subJsonPath": "/json/",\n  "subJsonURI": "https://sub.example.com/json/",\n  "subClashEnable": true,\n  "subClashPath": "/clash/",\n  "subClashURI": "https://sub.example.com/clash/",\n  "tgBotEnable": false,\n  ...\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/setting/validateRegex',
+        summary:
+          'Validate any regular expression with the backend Go RE2 compiler without saving it.',
+        body: '{\n  "regex": "(?m)^general-purpose$"\n}',
+        response: '{\n  "success": true,\n  "msg": ""\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/setting/updateUser',
+        summary:
+          'Change the panel admin username and password. Requires the current credentials for verification. The session is refreshed with the new values on success.',
+        params: [
+          { name: 'oldUsername', in: 'body', type: 'string', desc: 'Current admin username.' },
+          { name: 'oldPassword', in: 'body', type: 'string', desc: 'Current admin password.' },
+          { name: 'newUsername', in: 'body', type: 'string', desc: 'Desired new username.' },
+          { name: 'newPassword', in: 'body', type: 'string', desc: 'Desired new password.' },
+        ],
+        body: '{\n  "oldUsername": "admin",\n  "oldPassword": "admin",\n  "newUsername": "newadmin",\n  "newPassword": "newpass"\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/setting/restartPanel',
+        summary:
+          'Restart the entire 3x-ui process after a 3-second grace period. The connection drops immediately; the panel comes back online ~5-10 seconds later.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/setting/testSmtp',
+        summary:
+          'Test SMTP connection with stage-by-stage reporting (connect, auth, send). Returns structured result with stage and message.',
+        response:
+          '{\n  "success": true,\n  "stage": "send",\n  "msg": "Test email sent successfully"\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/setting/testTgBot',
+        summary: 'Test Telegram bot connection by sending a test message to the configured chat.',
+        response: '{\n  "success": true,\n  "msg": "Test message sent to Telegram"\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/setting/testDiscord',
+        summary: 'Test Discord bot connection by sending a test embed to the configured channel.',
+        response: '{\n  "success": true,\n  "msg": "Test notification sent successfully"\n}',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/setting/getDefaultJsonConfig',
+        summary:
+          'Return the built-in default Xray JSON config template that ships with this panel version.',
+      },
+    ],
+  },
+
+  {
+    id: 'api-tokens',
+    title: 'API Tokens',
+    description:
+      'Manage scoped Bearer tokens for programmatic auth. Tokens grant admin, monitor, or node-sync access, may expire, and are stored as SHA-256 hashes. The plaintext is returned only once at creation.',
+    endpoints: [
+      {
+        method: 'GET',
+        path: '/panel/api/setting/apiTokens',
+        summary:
+          'List every API token, enabled or not. The token value is never returned — only metadata.',
+        response:
+          '{\n  "success": true,\n  "obj": [\n    {\n      "id": 1,\n      "name": "default",\n      "enabled": true,\n      "createdAt": 1736000000\n    }\n  ]\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/setting/apiTokens/create',
+        summary:
+          'Mint a scoped API token. The server-generated plaintext is returned only once and stored as a hash.',
+        params: [
+          {
+            name: 'name',
+            in: 'body',
+            type: 'string',
+            desc: 'Human-readable label, e.g. "central-panel-a".',
+          },
+          {
+            name: 'scope',
+            in: 'body',
+            type: 'string',
+            desc: 'admin (default), monitor, or node-sync.',
+            optional: true,
+          },
+          {
+            name: 'expiresAt',
+            in: 'body',
+            type: 'number',
+            desc: 'Future Unix milliseconds, or 0 for no expiry.',
+            optional: true,
+          },
+        ],
+        body: '{\n  "name": "central-panel-a",\n  "scope": "node-sync",\n  "expiresAt": 1798761600000\n}',
+        responseSchema: 'ApiTokenView',
+        errorResponse:
+          '{\n  "success": false,\n  "msg": "a token with that name already exists"\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/setting/apiTokens/delete/:id',
+        summary:
+          'Permanently delete a token. Any caller using it stops authenticating immediately.',
+        params: [
+          { name: 'id', in: 'path', type: 'number', desc: 'Token row ID.' },
+          {
+            name: 'expectedScope',
+            in: 'body',
+            type: 'string',
+            desc: 'Stored scope expected by the operator.',
+          },
+        ],
+        body: '{\n  "expectedScope": "node-sync"\n}',
+        response: '{\n  "success": true\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/setting/apiTokens/setEnabled/:id',
+        summary:
+          'Toggle a token enabled/disabled without deleting it. Disabled tokens are rejected by checkAPIAuth on the next request.',
+        params: [
+          { name: 'id', in: 'path', type: 'number', desc: 'Token row ID.' },
+          { name: 'enabled', in: 'body', type: 'boolean', desc: 'New enabled state.' },
+          {
+            name: 'expectedScope',
+            in: 'body',
+            type: 'string',
+            desc: 'Stored scope expected by the operator.',
+          },
+        ],
+        body: '{\n  "enabled": false,\n  "expectedScope": "node-sync"\n}',
+        response: '{\n  "success": true\n}',
+      },
+    ],
+  },
+
+  {
+    id: 'xray-settings',
+    title: 'Xray Settings',
+    description:
+      'Xray configuration template, outbound management, Warp/Nord/PIA integration, and config testing. All endpoints under /panel/api/xray.',
+    endpoints: [
+      {
+        method: 'POST',
+        path: '/panel/api/xray/',
+        summary:
+          'Return the Xray config template (JSON string), available inbound tags, client reverse tags, and the configured outbound test URL in one response.',
+        response:
+          '{\n  "success": true,\n  "obj": {\n    "xraySetting": "{...raw xray config...}",\n    "inboundTags": "[\\"in-443-tcp\\"]",\n    "clientReverseTags": "[]",\n    "outboundTestUrl": "https://www.google.com/generate_204"\n  }\n}',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/xray/getDefaultJsonConfig',
+        summary:
+          'Return the built-in default Xray config shipped with the panel (identical to /panel/api/setting/getDefaultJsonConfig).',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/xray/getOutboundsTraffic',
+        summary:
+          'Return traffic statistics for every outbound. Each outbound shows up/down/total counters.',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/xray/getXrayResult',
+        summary:
+          'Return the most recent Xray process stdout/stderr output. Useful to check for startup errors or runtime warnings.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/xray/update',
+        summary:
+          'Save the Xray JSON config template and optionally the outbound test URL. Both are sent as form fields.',
+        params: [
+          {
+            name: 'xraySetting',
+            in: 'body (form)',
+            type: 'string',
+            desc: 'Full Xray JSON config template.',
+          },
+          {
+            name: 'outboundTestUrl',
+            in: 'body (form)',
+            type: 'string',
+            desc: 'URL used for outbound reachability tests. Defaults to https://www.google.com/generate_204.',
+            optional: true,
+          },
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/xray/warp/:action',
+        summary: 'Manage Cloudflare Warp integration. The action parameter selects the operation.',
+        params: [
+          {
+            name: 'action',
+            in: 'path',
+            type: 'string',
+            desc: 'data — return Warp stats. del — delete Warp data. config — return current config. reg — register (sends keys). regMasque — register a separate device enrolled for MASQUE and return its warp key pair, addresses and endpoint. changeIp — rotate the endpoint. license — set a Warp+ key. interval — set automatic rotation in hours.',
+          },
+          {
+            name: 'privateKey',
+            in: 'body (form)',
+            type: 'string',
+            desc: 'Required when action=reg.',
+            optional: true,
+          },
+          {
+            name: 'publicKey',
+            in: 'body (form)',
+            type: 'string',
+            desc: 'Required when action=reg.',
+            optional: true,
+          },
+          {
+            name: 'license',
+            in: 'body (form)',
+            type: 'string',
+            desc: 'Required when action=license.',
+            optional: true,
+          },
+          {
+            name: 'interval',
+            in: 'body (form)',
+            type: 'integer',
+            desc: 'Non-negative hours between automatic rotations. Required when action=interval; 0 disables rotation.',
+            optional: true,
+          },
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/xray/nord/:action',
+        summary: 'Manage NordVPN integration. The action parameter selects the operation.',
+        params: [
+          {
+            name: 'action',
+            in: 'path',
+            type: 'string',
+            desc: 'countries — list available countries. servers — list servers in a country (sends countryId). reg — get NordVPN credentials (sends token). setKey — store NordVPN API key (sends key). data — return current NordVPN connection data. del — delete NordVPN data.',
+          },
+          {
+            name: 'countryId',
+            in: 'body (form)',
+            type: 'string',
+            desc: 'Required when action=servers.',
+            optional: true,
+          },
+          {
+            name: 'token',
+            in: 'body (form)',
+            type: 'string',
+            desc: 'Required when action=reg.',
+            optional: true,
+          },
+          {
+            name: 'key',
+            in: 'body (form)',
+            type: 'string',
+            desc: 'Required when action=setKey.',
+            optional: true,
+          },
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/xray/pia/:action',
+        summary: 'Manage PIA WireGuard integration. The action parameter selects the operation.',
+        params: [
+          {
+            name: 'action',
+            in: 'path',
+            type: 'string',
+            desc: 'countries — list available countries from the signed PIA server list. servers — list regions and WireGuard servers in a country (sends countryCode). reg — sign in with a PIA username and password (sends username, password). data — return the signed-in account hint. del — delete stored PIA credentials. addKey — register a WireGuard key with the selected server (sends hostname) and return fields to build the outbound.',
+          },
+          {
+            name: 'username',
+            in: 'body (form)',
+            type: 'string',
+            desc: 'Required when action=reg.',
+            optional: true,
+          },
+          {
+            name: 'password',
+            in: 'body (form)',
+            type: 'string',
+            desc: 'Required when action=reg.',
+            optional: true,
+          },
+          {
+            name: 'countryCode',
+            in: 'body (form)',
+            type: 'string',
+            desc: 'Required when action=servers.',
+            optional: true,
+          },
+          {
+            name: 'hostname',
+            in: 'body (form)',
+            type: 'string',
+            desc: 'Required when action=addKey.',
+            optional: true,
+          },
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/xray/resetOutboundsTraffic',
+        summary: 'Reset traffic counters for a specific outbound by tag.',
+        params: [
+          {
+            name: 'tag',
+            in: 'body (form)',
+            type: 'string',
+            desc: 'Outbound tag to reset (e.g. "proxy", "direct").',
+          },
+        ],
+        body: 'tag=proxy',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/xray/testOutbound',
+        summary:
+          'Test an outbound configuration. Sends the outbound JSON (required), optionally all outbounds (to resolve sockopt.dialerProxy dependencies), and a mode flag.',
+        params: [
+          {
+            name: 'outbound',
+            in: 'body (form)',
+            type: 'string',
+            desc: 'JSON-encoded single outbound to test (required).',
+          },
+          {
+            name: 'allOutbounds',
+            in: 'body (form)',
+            type: 'string',
+            desc: 'JSON array of all outbounds — used to resolve dialerProxy chains.',
+            optional: true,
+          },
+          {
+            name: 'mode',
+            in: 'body (form)',
+            type: 'string',
+            desc: '"tcp" for a fast dial-only probe (parallel-safe), "real" for a real-delay probe whose delay is the full request time including tunnel establishment. Default/empty uses a full HTTP probe reporting the warm per-request round-trip. Both HTTP variants run through a temp xray instance.',
+            optional: true,
+          },
+        ],
+        body: 'outbound={"protocol":"freedom","settings":{}}&mode=tcp',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/xray/testOutbounds',
+        summary:
+          'Test a batch of outbounds (max 50) through one shared temp xray instance. Returns an array of results in input order, each with the outbound tag, delay, HTTP status and a connect/TLS/TTFB timing breakdown.',
+        params: [
+          {
+            name: 'outbounds',
+            in: 'body (form)',
+            type: 'string',
+            desc: 'JSON array of outbound configs to test (required).',
+          },
+          {
+            name: 'allOutbounds',
+            in: 'body (form)',
+            type: 'string',
+            desc: 'JSON array of all outbounds — used to resolve dialerProxy chains.',
+            optional: true,
+          },
+          {
+            name: 'mode',
+            in: 'body (form)',
+            type: 'string',
+            desc: '"tcp" for fast dial-only probes (UDP-transport outbounds are still probed over HTTP), "real" for real-delay probes whose delay is the full request time including tunnel establishment. Default/empty routes an HTTP request through each outbound and reports the warm per-request round-trip.',
+            optional: true,
+          },
+        ],
+        body: 'outbounds=[{"tag":"direct","protocol":"freedom","settings":{}}]&mode=http',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/xray/balancerStatus',
+        summary:
+          'Live state of routing balancers in the running core (RoutingService.GetBalancerInfo): current override and the targets the strategy prefers. Returns a map keyed by balancer tag.',
+        params: [
+          {
+            name: 'tags',
+            in: 'body (form)',
+            type: 'string',
+            desc: 'Comma-separated balancer tags to query (e.g. "b1,b2").',
+          },
+        ],
+        body: 'tags=b1,b2',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/xray/balancerOverride',
+        summary:
+          'Force a balancer in the running core to always pick one outbound (RoutingService.OverrideBalancerTarget). Applied live without a restart and kept across config saves; cleared when Xray restarts or the target outbound is removed.',
+        params: [
+          { name: 'tag', in: 'body (form)', type: 'string', desc: 'Balancer tag (required).' },
+          {
+            name: 'target',
+            in: 'body (form)',
+            type: 'string',
+            desc: 'Outbound tag to force; it must exist in the running config. Empty clears the override and returns control to the strategy.',
+            optional: true,
+          },
+        ],
+        body: 'tag=b1&target=proxy',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/xray/routeTest',
+        summary:
+          'Ask the running core which outbound its router would pick for a synthetic connection (RoutingService.TestRoute). No traffic is sent.',
+        bodyRequiredOneOf: ['domain', 'ip'],
+        params: [
+          {
+            name: 'domain',
+            in: 'body (form)',
+            type: 'string',
+            desc: 'Target domain. Either domain or ip is required.',
+            optional: true,
+            minLength: 1,
+          },
+          {
+            name: 'ip',
+            in: 'body (form)',
+            type: 'string',
+            desc: 'Target IP. Either domain or ip is required.',
+            optional: true,
+            minLength: 1,
+          },
+          {
+            name: 'port',
+            in: 'body (form)',
+            type: 'number',
+            desc: 'Target port (optional).',
+            optional: true,
+          },
+          {
+            name: 'network',
+            in: 'body (form)',
+            type: 'string',
+            desc: '"tcp" (default) or "udp".',
+            optional: true,
+          },
+          {
+            name: 'inboundTag',
+            in: 'body (form)',
+            type: 'string',
+            desc: 'Simulate arrival on this inbound (optional).',
+            optional: true,
+          },
+          {
+            name: 'protocol',
+            in: 'body (form)',
+            type: 'string',
+            desc: 'Sniffed protocol such as http, tls, bittorrent (optional).',
+            optional: true,
+          },
+          {
+            name: 'email',
+            in: 'body (form)',
+            type: 'string',
+            desc: 'User attribution for user-based rules (optional).',
+            optional: true,
+          },
+        ],
+        body: 'domain=example.com&port=443&network=tcp',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/xray/geodata/files',
+        summary:
+          'List the geo databases (.dat files) in the Xray asset folder, with the layout detected from their contents, size, modification time and category count. A database that fails to parse is still listed, with the reason in "error".',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/xray/geodata/categories',
+        summary:
+          'One page of a database\'s categories, each with its entry count and the attributes its domains carry (e.g. "ads", "cn").',
+        params: [
+          {
+            name: 'file',
+            in: 'query',
+            type: 'string',
+            desc: 'Database file name inside the asset folder, e.g. geosite.dat (required).',
+          },
+          {
+            name: 'q',
+            in: 'query',
+            type: 'string',
+            optional: true,
+            desc: 'Case-insensitive substring filter on the category code.',
+          },
+          {
+            name: 'offset',
+            in: 'query',
+            type: 'integer',
+            optional: true,
+            desc: 'Rows to skip. Defaults to 0.',
+          },
+          {
+            name: 'limit',
+            in: 'query',
+            type: 'integer',
+            optional: true,
+            desc: 'Rows to return, capped at 500. Omit it to return every category — the index is small and the panel filters it client-side.',
+          },
+        ],
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/xray/geodata/entries',
+        summary:
+          'One page of the rules inside a category — domain rules typed as domain/full/keyword/regexp for geosite databases, CIDRs for geoip ones.',
+        params: [
+          {
+            name: 'file',
+            in: 'query',
+            type: 'string',
+            desc: 'Database file name inside the asset folder (required).',
+          },
+          {
+            name: 'code',
+            in: 'query',
+            type: 'string',
+            desc: 'Category code, case-insensitive, e.g. google (required).',
+          },
+          {
+            name: 'q',
+            in: 'query',
+            type: 'string',
+            optional: true,
+            desc: 'Case-insensitive substring filter on the rule value.',
+          },
+          {
+            name: 'offset',
+            in: 'query',
+            type: 'integer',
+            optional: true,
+            desc: 'Rows to skip. Defaults to 0.',
+          },
+          {
+            name: 'limit',
+            in: 'query',
+            type: 'integer',
+            optional: true,
+            desc: 'Rows to return, capped at 500. Defaults to the cap.',
+          },
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/xray/geodata/validate',
+        summary:
+          'Check routing tokens against the databases on disk and return only the ones that do not resolve. Plain domains and CIDRs are ignored. Each issue carries a reason: syntax, fileMissing or categoryMissing.',
+        params: [
+          {
+            name: 'tokens',
+            in: 'body (form)',
+            type: 'string',
+            desc: 'Comma-separated routing tokens, e.g. "geosite:google,geosite:blabla". Max 500 per request.',
+          },
+          {
+            name: 'kind',
+            in: 'body (form)',
+            type: 'string',
+            desc: '"ip" to parse the tokens as IP rules (geoip:, ext-ip:, leading !). Anything else parses them as domain rules (geosite:, ext-site:).',
+            optional: true,
+          },
+        ],
+        body: 'kind=domain&tokens=geosite:google,geosite:blabla',
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/xray/outbound-subs',
+        summary:
+          'List all outbound subscriptions (remote URLs that supply additional outbounds), newest first.',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/xray/outbound-subs',
+        summary:
+          'Create an outbound subscription. The URL is fetched, parsed into outbounds with stable tags, and merged additively into the running Xray config.',
+        params: outboundSubscriptionBodyParams,
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/xray/outbound-subs/:id',
+        summary:
+          'Update an existing outbound subscription by id. Accepts the same form fields as create.',
+        params: [
+          { name: 'id', in: 'path', type: 'integer', desc: 'Subscription id.' },
+          ...outboundSubscriptionBodyParams,
+        ],
+      },
+      {
+        method: 'DELETE',
+        path: '/panel/api/xray/outbound-subs/:id',
+        summary: 'Delete an outbound subscription by id.',
+        params: [{ name: 'id', in: 'path', type: 'integer', desc: 'Subscription id.' }],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/xray/outbound-subs/:id/del',
+        summary:
+          'Delete an outbound subscription by id (POST alias of DELETE for clients that cannot send DELETE).',
+        params: [{ name: 'id', in: 'path', type: 'integer', desc: 'Subscription id.' }],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/xray/outbound-subs/:id/refresh',
+        summary:
+          'Force an immediate re-fetch of the subscription and return the parsed outbounds. Signals Xray to reload.',
+        params: [{ name: 'id', in: 'path', type: 'integer', desc: 'Subscription id.' }],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/xray/outbound-subs/:id/move',
+        summary:
+          'Reorder a subscription one step up or down in priority (controls its position in the merged outbounds).',
+        params: [
+          { name: 'id', in: 'path', type: 'integer', desc: 'Subscription id.' },
+          {
+            name: 'dir',
+            in: 'body (form)',
+            type: 'string',
+            desc: '"up" to raise priority, anything else to lower it.',
+            optional: true,
+          },
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/xray/outbound-subs/parse',
+        summary:
+          'Preview a subscription URL: fetch and parse it into outbounds without persisting anything.',
+        params: [
+          {
+            name: 'url',
+            in: 'body (form)',
+            type: 'string',
+            desc: 'Subscription URL to preview (required).',
+          },
+          {
+            name: 'userAgent',
+            in: 'body (form)',
+            type: 'string',
+            desc: 'Custom User-Agent sent while fetching the preview.',
+            optional: true,
+          },
+          {
+            name: 'allowPrivate',
+            in: 'body (form)',
+            type: 'boolean',
+            desc: 'Allow a private/internal/loopback URL. Default false.',
+            optional: true,
+          },
+          {
+            name: 'allowInsecure',
+            in: 'body (form)',
+            type: 'boolean',
+            desc: 'Skip TLS certificate verification. Default false.',
+            optional: true,
+          },
+        ],
+      },
+    ],
+  },
+
+  {
+    id: 'sub-balancers',
+    title: 'Subscription Balancers',
+    description:
+      'Client-side balancers for the JSON subscription: each enabled balancer is emitted as one extra config document whose members are the proxy outbounds of the selected inbounds (routing.balancers + burstObservatory). Managed in Settings → Sub Balancers.',
+    endpoints: [
+      {
+        method: 'GET',
+        path: '/panel/api/sub-balancers',
+        summary: 'List all subscription balancers in sort order (sort_order asc, id asc).',
+        responseSchema: 'SubBalancer',
+        responseSchemaArray: true,
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/sub-balancers',
+        summary:
+          'Create a subscription balancer. It appears in the JSON subscription of every client that sits on at least one selected inbound.',
+        params: subBalancerBodyParams,
+        responseSchema: 'SubBalancer',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/sub-balancers/:id',
+        summary:
+          'Update a balancer by id. Accepts the same form fields as create (full-row update); omitting memberWeights clears stored weights, while omitting enabled keeps its current value.',
+        params: [
+          { name: 'id', in: 'path', type: 'integer', desc: 'Balancer id.' },
+          ...subBalancerBodyParams,
+        ],
+        responseSchema: 'SubBalancer',
+      },
+      {
+        method: 'DELETE',
+        path: '/panel/api/sub-balancers/:id',
+        summary: 'Delete a balancer by id.',
+        params: [{ name: 'id', in: 'path', type: 'integer', desc: 'Balancer id.' }],
+        responseSchema: 'SubBalancer',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/sub-balancers/:id/del',
+        summary:
+          'Delete a balancer by id (POST alias of DELETE for clients that cannot send DELETE).',
+        params: [{ name: 'id', in: 'path', type: 'integer', desc: 'Balancer id.' }],
+        responseSchema: 'SubBalancer',
+      },
+    ],
+  },
+
+  {
+    id: 'subscription',
+    title: 'Subscription Server',
+    description:
+      'A separate HTTP/HTTPS server that serves proxy subscription links (standard, JSON, and Clash) to clients. The server listens on its own port (default 2096) and is configured in Settings → Subscription. Fresh panels generate random path prefixes for each format; all paths remain configurable. Every subscription endpoint sets response headers for client apps to read traffic/expiry info.',
+    subHeader: [
+      {
+        name: 'Subscription-Userinfo',
+        desc: 'Traffic and expiry: <code>upload=N; download=N; total=N; expire=TS</code>',
+      },
+      { name: 'Profile-Title', desc: 'Base64-encoded subscription display name' },
+      { name: 'Profile-Web-Page-Url', desc: 'Link to the subscription info page' },
+      { name: 'Support-Url', desc: 'Support contact URL configured in settings' },
+      {
+        name: 'Profile-Update-Interval',
+        desc: 'Suggested polling interval in minutes (e.g. <code>10</code>)',
+      },
+      { name: 'Announce', desc: 'Base64-encoded announcement string' },
+      {
+        name: 'Routing-Enable',
+        desc: '<code>true</code> or <code>false</code> — whether routing rules are included',
+      },
+      {
+        name: 'Routing',
+        desc: 'Global routing rules for client apps that support them (e.g. Happ)',
+      },
+    ],
+    endpoints: [
+      {
+        method: 'GET',
+        path: '/{subPath}:subid',
+        summary:
+          'Return base64-encoded subscription links for all enabled clients matching the subscription ID. When the request has an Accept: text/html header or ?html=1, renders a styled info page instead. With ?format=info, returns the page view-model as JSON (traffic, expiry, online status; no links) for live polling. The path prefix is configured by subPath.',
+        params: [
+          { name: 'subid', in: 'path', type: 'string', desc: 'Client subscription ID.' },
+          {
+            name: 'format',
+            in: 'query',
+            type: 'string',
+            optional: true,
+            desc: 'Set to "info" to get the subscription status view-model as JSON instead of the links.',
+          },
+        ],
+      },
+      {
+        method: 'HEAD',
+        path: '/{subPath}:subid',
+        summary:
+          'Return the same status and subscription metadata headers as GET without a response body.',
+        params: [{ name: 'subid', in: 'path', type: 'string', desc: 'Client subscription ID.' }],
+        responses: subscriptionHeadResponses,
+      },
+      {
+        method: 'GET',
+        path: '/{subPath}:subid/hwid-status',
+        summary:
+          'Return aggregate HWID device-slot usage for the subscription: whether an HWID limit is active, the limit, how many devices are registered and how many slots remain. Read-only — it never registers a device, so asking does not consume a slot. Counters only: no HWID value, email or device metadata. The path prefix is configured by subPath.',
+        description:
+          'Responds with the bare HwidSlotStatus object, not the <code>{success,msg,obj}</code> panel envelope, like the other subscription-server routes. With no HWID limit configured, <code>active</code> is false and every counter is 0.',
+        params: [{ name: 'subid', in: 'path', type: 'string', desc: 'Client subscription ID.' }],
+        responses: {
+          '200': {
+            description: 'Device-slot counters for the subscription.',
+            content: {
+              'application/json': { schema: { $ref: '#/components/schemas/HwidSlotStatus' } },
+            },
+          },
+          ...hwidStatusErrorResponses,
+        },
+      },
+      {
+        method: 'HEAD',
+        path: '/{subPath}:subid/hwid-status',
+        summary:
+          'Return the HWID device-slot status code and headers as GET without a response body.',
+        params: [{ name: 'subid', in: 'path', type: 'string', desc: 'Client subscription ID.' }],
+        responses: {
+          '200': { description: 'Headers match GET; no response body.' },
+          ...hwidStatusErrorResponses,
+        },
+      },
+      {
+        method: 'GET',
+        path: '/{jsonPath}:subid',
+        summary:
+          'Return subscription as a JSON array of proxy configs (one per enabled client). Only when JSON subscription is enabled in settings. The path prefix is configured by subJsonPath.',
+        params: [{ name: 'subid', in: 'path', type: 'string', desc: 'Client subscription ID.' }],
+      },
+      {
+        method: 'HEAD',
+        path: '/{jsonPath}:subid',
+        summary:
+          'Return the JSON subscription status and metadata headers without a body. Registered only when JSON subscriptions are enabled.',
+        params: [{ name: 'subid', in: 'path', type: 'string', desc: 'Client subscription ID.' }],
+        responses: subscriptionHeadResponses,
+      },
+      {
+        method: 'GET',
+        path: '/{clashPath}:subid',
+        summary:
+          'Return subscription as a Clash/Mihomo-compatible YAML config, including configured global Clash routing rules. Only when Clash subscription is enabled in settings. The path prefix is configured by subClashPath.',
+        params: [{ name: 'subid', in: 'path', type: 'string', desc: 'Client subscription ID.' }],
+      },
+      {
+        method: 'HEAD',
+        path: '/{clashPath}:subid',
+        summary:
+          'Return the Clash subscription status and metadata headers without a body. Registered only when Clash subscriptions are enabled.',
+        params: [{ name: 'subid', in: 'path', type: 'string', desc: 'Client subscription ID.' }],
+        responses: subscriptionHeadResponses,
+      },
+    ],
+  },
+
+  {
+    id: 'websocket',
+    title: 'WebSocket',
+    description:
+      'Real-time status updates via WebSocket. Connect once at <code>ws://<panel>/ws</code> to receive a stream of JSON messages without polling. Requires an authenticated session cookie (Bearer token auth is not supported). Each message has a <code>type</code> field that identifies the payload shape.',
+    endpoints: [
+      {
+        method: 'GET',
+        path: '/ws',
+        summary:
+          'Upgrade an HTTP connection to a WebSocket. Requires an authenticated session cookie (Bearer token auth is not supported here). Returns 101 Switching Protocols on success. The server then pushes JSON messages described below.',
+        responses: {
+          '101': { description: 'Switching Protocols. WebSocket messages use WebSocketEnvelope.' },
+          '401': { description: 'No authenticated panel session cookie.' },
+        },
+        security: [{ cookieAuth: [] }],
+      },
+    ],
+  },
+];
