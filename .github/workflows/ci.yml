@@ -30,6 +30,8 @@ jobs:
       - run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
       - name: Installer tests (fake root)
         run: tests/installer_test.sh
+      - name: Host release script tests
+        run: tests/host_test.sh
       - name: Overlay tests against the release the overlay was made from
         run: tests/run.sh
 

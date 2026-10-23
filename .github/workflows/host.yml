@@ -1,0 +1,163 @@
+name: Build the plugin host
+
+# The plugin host is the service that installs and runs plugins. Every change to its code is built and
+# checked here. A release (host-N, the binaries and the signed host.json that servers update from) is
+# made only by hand: run this workflow with "publish" on. It also needs the repository variable
+# PUBLISH_ENABLED=true and the secret BUILDS_SIGNING_KEY.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "cmd/lucx-plugin-host/**"
+      - "cmd/lucx-plugins-sync/**"
+      - "internal/**"
+      - "keys/**"
+      - "scripts/build-host.sh"
+      - "scripts/host-list.sh"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/host.yml"
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish the next host-N release and update the signed host.json"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: host
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      publish: ${{ steps.version.outputs.publish }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+      - name: Pick the version
+        id: version
+        env:
+          WANT_PUBLISH: ${{ inputs.publish }}
+          PUBLISH_ENABLED: ${{ vars.PUBLISH_ENABLED }}
+        run: |
+          set -euo pipefail
+          publish=false
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ "$WANT_PUBLISH" = "true" ]; then
+            if [ "$PUBLISH_ENABLED" = "true" ]; then publish=true; else echo "::warning::publish was asked for but PUBLISH_ENABLED is not true; building only"; fi
+          fi
+          last=$(gh release list -R "$GITHUB_REPOSITORY" --limit 200 --json tagName \
+            --jq '[.[].tagName | select(test("^host-[0-9]+$")) | ltrimstr("host-") | tonumber] | max // 0')
+          # A build that will not be published still needs a valid name; it is never uploaded.
+          if [ "$publish" = "true" ]; then version="host-$((last + 1))"; else version="host-1"; fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+      - name: Test
+        run: go test -count=1 ./...
+      - name: Build both architectures
+        run: scripts/build-host.sh "${{ steps.version.outputs.version }}" out
+      - name: Check the static binaries
+        run: |
+          set -euo pipefail
+          for a in amd64 arm64; do file "out/lucx-plugin-host-linux-$a" | grep -q "statically linked"; done
+          cat out/*.sha256
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: host
+          path: out/*
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    if: needs.build.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.build.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: host
+          path: dl
+      - name: Release
+        run: |
+          set -euo pipefail
+          if gh release view "$VERSION" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "$VERSION already exists; a release is never changed" >&2
+            exit 1
+          fi
+          {
+            echo "The LucX-UI plugin system service, release ${VERSION}."
+            echo
+            echo "Not a standalone install: the installer puts it on a server and the Plugins page of the panel updates it. The signed record of the current release is host.json on the builds branch."
+            echo
+            echo "- amd64: \`$(cat dl/lucx-plugin-host-linux-amd64.sha256)\`"
+            echo "- arm64: \`$(cat dl/lucx-plugin-host-linux-arm64.sha256)\`"
+            echo
+            echo "Source: https://github.com/${GITHUB_REPOSITORY}/tree/${GITHUB_SHA} (MIT, see LICENSING.md)."
+          } > notes.md
+          gh release create "$VERSION" -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --latest=false --title "$VERSION" --notes-file notes.md \
+            dl/lucx-plugin-host-linux-amd64 dl/lucx-plugin-host-linux-arm64
+      - name: Update and sign host.json
+        env:
+          BUILDS_SIGNING_KEY: ${{ secrets.BUILDS_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            rm -rf site
+            if git ls-remote --exit-code --heads origin builds > /dev/null 2>&1; then
+              git clone --quiet --branch builds --single-branch "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" site
+            else
+              git init --quiet -b builds site
+              git -C site remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+            fi
+            scripts/host-list.sh "$VERSION" dl site
+            git -C site add host.json host.json.sig
+            git -C site -c user.name="lucx-plugins build" -c user.email="actions@users.noreply.github.com" commit --quiet -m "Host ${VERSION}"
+            if git -C site push --quiet origin builds; then exit 0; fi
+            echo "push raced, retrying ($attempt)"
+            sleep $((attempt * 3))
+          done
+          echo "could not publish host.json" >&2
+          exit 1
+
+  notify:
+    needs: [build, publish]
+    if: always() && needs.build.outputs.publish == 'true' && (needs.build.result == 'failure' || needs.publish.result == 'failure')
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update an issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          title="Host release failed"
+          gh label create build-failure -R "$GITHUB_REPOSITORY" --color B60205 --description "An automatic build failed" 2> /dev/null || true
+          existing=$(gh issue list -R "$GITHUB_REPOSITORY" --label build-failure --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" -R "$GITHUB_REPOSITORY" --body "Failed again: ${RUN_URL}"
+          else
+            gh issue create -R "$GITHUB_REPOSITORY" --title "$title" --label build-failure --body "The host release failed: ${RUN_URL}"
+          fi
