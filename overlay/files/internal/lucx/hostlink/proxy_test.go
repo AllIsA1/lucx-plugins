@@ -296,3 +296,48 @@ func TestACompressedAnswerKeepsNoStaleLength(t *testing.T) {
 		t.Errorf("decompressed body differs (%d bytes, want %d)", len(plain), len(big))
 	}
 }
+
+// An error answer of the host (a node's refusal, for instance) must reach a browser or a master
+// panel readable, whether or not the panel compresses what it sends.
+func TestAnErrorAnswerSurvivesThePanelsCompression(t *testing.T) {
+	for _, status := range []int{http.StatusForbidden, http.StatusNotFound, http.StatusServiceUnavailable, http.StatusOK} {
+		body := `{"success":false,"msg":"plugin management by the master is disabled on this node","obj":null}`
+		l := newLink(t, fakeHost(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+			w.WriteHeader(status)
+			_, _ = w.Write([]byte(body))
+		})))
+		e := gin.New()
+		e.Use(sessions.Sessions("t", cookie.NewStore([]byte("secret"))), gzip.Gzip(gzip.DefaultCompression))
+		l.RegisterAdmin(e.Group("/panel/api/plugins"))
+		srv := httptest.NewServer(e)
+		// A client that does not decompress by itself, like the master panel's node client.
+		client := &http.Client{Transport: &http.Transport{DisableCompression: true}}
+		req, _ := http.NewRequest(http.MethodGet, srv.URL+"/panel/api/plugins/list", nil)
+		req.Header.Set("Accept-Encoding", "gzip")
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		srv.Close()
+		var plain []byte = raw
+		if resp.Header.Get("Content-Encoding") == "gzip" {
+			zr, err := stdgzip.NewReader(bytes.NewReader(raw))
+			if err != nil {
+				t.Errorf("status %d: labelled gzip but not a gzip stream: %q", status, raw)
+				continue
+			}
+			plain, err = io.ReadAll(zr)
+			if err != nil {
+				t.Errorf("status %d: broken gzip stream: %v (%q)", status, err, raw)
+				continue
+			}
+		}
+		if resp.StatusCode != status || string(plain) != body {
+			t.Errorf("status %d: got %d %q (Content-Encoding %q)", status, resp.StatusCode, plain, resp.Header.Get("Content-Encoding"))
+		}
+	}
+}

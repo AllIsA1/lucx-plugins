@@ -105,8 +105,7 @@ func hostPath(escaped, stripPrefix, hostPrefix string) (path, raw string) {
 
 func (l *Link) forward(stripPrefix, hostPrefix string) gin.HandlerFunc {
 	proxy := &httputil.ReverseProxy{
-		Transport:     l.slow,
-		FlushInterval: -1,
+		Transport: l.slow,
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			out := pr.Out
 			out.URL.Scheme, out.URL.Host, out.Host = "http", "host", "host"
@@ -131,9 +130,10 @@ func (l *Link) forward(stripPrefix, hostPrefix string) gin.HandlerFunc {
 			// A page served from the panel's origin must not be able to set the panel's cookies.
 			resp.Header.Del("Set-Cookie")
 			// The panel compresses what it sends, so the host's length would be wrong for the body that
-			// goes out: browsers cut such a response off.
+			// goes out: browsers cut such a response off. ContentLength stays as it is on purpose: -1 makes
+			// the reverse proxy flush before the first byte, which commits headers before the compressor
+			// can decide, and an error answer then arrives labelled gzip but not gzipped.
 			resp.Header.Del("Content-Length")
-			resp.ContentLength = -1
 			return nil
 		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
