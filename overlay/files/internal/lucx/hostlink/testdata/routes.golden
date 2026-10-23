@@ -4,6 +4,8 @@ GET /panel/api/plugins/frame-token/:id
 GET /panel/api/plugins/list
 GET /panel/api/plugins/logs/:id
 GET /panel/api/plugins/menu
+GET /panel/api/plugins/nodes
+GET /panel/api/plugins/nodes/:nodeId/logs/:id
 GET /panel/api/plugins/system
 GET /panel/api/plugins/x/:id/*path
 GET /panel/plugin-frame/:token/*path
@@ -16,6 +18,13 @@ POST /panel/api/plugins/disable/:id
 POST /panel/api/plugins/enable/:id
 POST /panel/api/plugins/install
 POST /panel/api/plugins/master-management
+POST /panel/api/plugins/nodes/:nodeId/disable/:id
+POST /panel/api/plugins/nodes/:nodeId/enable/:id
+POST /panel/api/plugins/nodes/:nodeId/install
+POST /panel/api/plugins/nodes/:nodeId/refresh
+POST /panel/api/plugins/nodes/:nodeId/restart/:id
+POST /panel/api/plugins/nodes/:nodeId/uninstall/:id
+POST /panel/api/plugins/nodes/:nodeId/update/:id
 POST /panel/api/plugins/preview
 POST /panel/api/plugins/remote/install
 POST /panel/api/plugins/restart/:id

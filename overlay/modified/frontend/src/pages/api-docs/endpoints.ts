@@ -1681,6 +1681,29 @@ export const sections: readonly Section[] = [
           'Install the newest release of the plugin system: download, verify the signed hash, run it once, replace the service binary (the previous one is kept for rollback) and restart the service. Returns after the new binary is in place, just before the service restarts; for a few seconds /panel/api/plugins/* answers with an unavailable message. The panel, the plugins and VPN connections are not restarted. Fails when already up to date, when a signature or hash does not match or when an update is already running. Admin only. LucX-UI only.',
       },
       {
+        method: 'POST',
+        path: '/panel/api/lucx/plugin-relay/:nodeId',
+        summary:
+          "Internal. Carries one call of the plugin system to a node over this panel's own channel to that node (its credentials, TLS mode and egress rules). Reachable only on the plugin system's internal socket and only when the system names this route in its grant; a browser, an API token or a plugin gets 404 or 403. The call must be one of the few a master may make on a node's plugin API (list, logs, remote/install, enable, disable, uninstall, restart); anything else is refused without reaching the node. The node's own answer comes back with its status, marked with the header X-LucX-Relayed: node. LucX-UI only.",
+        params: [
+          { name: 'nodeId', in: 'path', type: 'integer', desc: 'Node id.' },
+          { name: 'method', in: 'body (json)', type: 'string', desc: 'GET or POST.' },
+          {
+            name: 'path',
+            in: 'body (json)',
+            type: 'string',
+            desc: 'The node route, for example /panel/api/plugins/enable/hello.',
+          },
+          {
+            name: 'body',
+            in: 'body (json)',
+            type: 'object',
+            optional: true,
+            desc: 'The JSON body of the call.',
+          },
+        ],
+      },
+      {
         method: 'GET',
         path: '/panel/api/plugins/x/:id/*path',
         summary:
@@ -1768,6 +1791,121 @@ export const sections: readonly Section[] = [
             in: 'body (json)',
             type: 'string',
             desc: 'Base URL such as https://mirror.example/gh; archives are fetched from <base>/<owner>/<repo>/tar.gz/<ref>.',
+          },
+        ],
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/plugins/nodes',
+        summary:
+          'What this master knows about the plugins on each enabled node, refreshed every 30 seconds. state is ok (plugins holds the node report), pending (not read yet), offline, unsupported (the node does not announce plugin support) or error (error says why). Master panel only; a node cannot call it for other nodes. LucX-UI only.',
+        response:
+          '{\n  "success": true,\n  "obj": [\n    {\n      "nodeId": 3,\n      "nodeName": "de-fra-1",\n      "state": "ok",\n      "fetchedAt": 1760789000,\n      "plugins": { "available": true, "allowMasterManagement": true, "plugins": [] }\n    }\n  ]\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/plugins/nodes/:nodeId/refresh',
+        summary: 'Read one node right now instead of waiting for the next poll. LucX-UI only.',
+        params: [{ name: 'nodeId', in: 'path', type: 'integer', desc: 'Node id.' }],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/plugins/nodes/:nodeId/install',
+        summary:
+          "Install a plugin that is installed on this panel onto a node, disabled. The commit, manifest hash and URL come from this panel's own record, never from the request; the permissions must equal those granted here. The node downloads and verifies the commit itself and must have master management allowed. A plugin of scope master cannot be sent. LucX-UI only.",
+        params: [
+          { name: 'nodeId', in: 'path', type: 'integer', desc: 'Node id.' },
+          {
+            name: 'id',
+            in: 'body (json)',
+            type: 'string',
+            desc: 'Id of a plugin installed on this panel.',
+          },
+          {
+            name: 'permissions',
+            in: 'body (json)',
+            type: 'string[]',
+            desc: 'Exactly the permissions granted to the plugin on this panel.',
+          },
+        ],
+        errorResponse:
+          '{\n  "success": false,\n  "msg": "plugins: node install failed (plugin management by the master is disabled on this node; turn it on in this node\'s Plugins page)"\n}',
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/plugins/nodes/:nodeId/update/:id',
+        summary:
+          "Move a plugin the master installed on a node to this panel's commit: the old one is removed (its data stays), the pinned commit from this panel's own record is installed and, if the plugin was on, turned on again. Refused before the node is touched when the permissions differ from this panel's, the plugin is not installed on the node, was installed there by hand, or already runs this commit. There is no automatic way back: a failure says whether the old version was removed and the new one not installed, or the new one is installed but off. The node must have allowed management by the master. LucX-UI only.",
+        params: [
+          { name: 'nodeId', in: 'path', type: 'integer', desc: 'Node id.' },
+          { name: 'id', in: 'path', type: 'string', desc: 'Plugin id.' },
+          {
+            name: 'permissions',
+            in: 'body (json)',
+            type: 'string[]',
+            desc: 'Exactly the permissions granted to the plugin on this panel.',
+          },
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/plugins/nodes/:nodeId/enable/:id',
+        summary: 'Enable a plugin the master installed on a node. LucX-UI only.',
+        params: [
+          { name: 'nodeId', in: 'path', type: 'integer', desc: 'Node id.' },
+          { name: 'id', in: 'path', type: 'string', desc: 'Plugin id.' },
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/plugins/nodes/:nodeId/disable/:id',
+        summary: 'Disable a plugin the master installed on a node. LucX-UI only.',
+        params: [
+          { name: 'nodeId', in: 'path', type: 'integer', desc: 'Node id.' },
+          { name: 'id', in: 'path', type: 'string', desc: 'Plugin id.' },
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/plugins/nodes/:nodeId/restart/:id',
+        summary: 'Restart the process of a plugin the master installed on a node. LucX-UI only.',
+        params: [
+          { name: 'nodeId', in: 'path', type: 'integer', desc: 'Node id.' },
+          { name: 'id', in: 'path', type: 'string', desc: 'Plugin id.' },
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/plugins/nodes/:nodeId/uninstall/:id',
+        summary:
+          'Remove a plugin the master installed from a node, optionally with its data. LucX-UI only.',
+        params: [
+          { name: 'nodeId', in: 'path', type: 'integer', desc: 'Node id.' },
+          { name: 'id', in: 'path', type: 'string', desc: 'Plugin id.' },
+          {
+            name: 'removeData',
+            in: 'body (json)',
+            type: 'boolean',
+            optional: true,
+            defaultValue: false,
+            desc: 'Also delete the plugin data directory on the node.',
+          },
+        ],
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/plugins/nodes/:nodeId/logs/:id',
+        summary: "The last lines a node's plugin process wrote. LucX-UI only.",
+        params: [
+          { name: 'nodeId', in: 'path', type: 'integer', desc: 'Node id.' },
+          { name: 'id', in: 'path', type: 'string', desc: 'Plugin id.' },
+          {
+            name: 'lines',
+            in: 'query',
+            type: 'integer',
+            optional: true,
+            defaultValue: 200,
+            desc: 'How many lines.',
           },
         ],
       },

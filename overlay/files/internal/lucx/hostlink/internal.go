@@ -15,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
+	"github.com/mhsanaei/3x-ui/v3/internal/web/network"
 	"github.com/mhsanaei/3x-ui/v3/internal/web/session"
 )
 
@@ -129,7 +130,7 @@ func ListenInternal(path string, handler http.Handler) (stop func(), err error) 
 		return nil, err
 	}
 	srv := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second}
-	go func() { _ = srv.Serve(ln) }()
+	go network.ServeHTTP(srv, ln, "Plugin host socket")
 	return func() {
 		_ = srv.Close()
 		_ = os.Remove(path)

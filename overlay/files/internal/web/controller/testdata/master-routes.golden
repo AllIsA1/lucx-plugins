@@ -1,0 +1,7 @@
+GET /panel/api/plugins/list
+GET /panel/api/plugins/logs/:id
+POST /panel/api/plugins/disable/:id
+POST /panel/api/plugins/enable/:id
+POST /panel/api/plugins/remote/install
+POST /panel/api/plugins/restart/:id
+POST /panel/api/plugins/uninstall/:id

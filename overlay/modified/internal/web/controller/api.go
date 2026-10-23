@@ -230,6 +230,8 @@ func (a *APIController) initRouter(g *gin.RouterGroup) {
 	// END LUCX-HOOK
 	// LUCX-HOOK: plugin system — /panel/api/plugins/* is answered by the plugin host.
 	hostlink.RegisterAdmin(api.Group("/plugins"))
+	// The plugin system's calls to nodes go through the panel's own node channel; only its socket reaches this.
+	_ = NewPluginRelayController(api.Group("/lucx"))
 	// END LUCX-HOOK
 
 	clients := api.Group("/clients")
