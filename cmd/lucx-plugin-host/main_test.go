@@ -5,12 +5,23 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
+	"net/http/httptest"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/AllIsA1/lucx-plugins/internal/builds"
+	"github.com/AllIsA1/lucx-plugins/internal/hostupdate"
 )
 
 func freeAddr(t *testing.T) string {
@@ -36,7 +47,7 @@ func TestHostServesItsSocketsAndStopsCleanly(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- run(ctx, cfg) }()
+	go func() { done <- run(ctx, cfg, newUpdater(cfg)) }()
 
 	client := &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 		return (&net.Dialer{}).DialContext(ctx, "unix", cfg.Socket)
@@ -95,5 +106,130 @@ func TestHostServesItsSocketsAndStopsCleanly(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("the host did not stop")
+	}
+}
+
+func scriptFor(version string) []byte {
+	return []byte("#!/bin/sh\n# " + version + "\necho " + version + "\n")
+}
+
+func hexSum(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:]) }
+
+// TestHostReplacesItselfOnRequestAndAsksToBeRestarted runs the whole path in one process: the admin
+// route, the signed list, the download, the swap on disk and the graceful stop that precedes the restart.
+func TestHostReplacesItselfOnRequestAndAsksToBeRestarted(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XUI_PLUGINS_RUNNER", "process")
+	t.Setenv("XUI_PLUGINS_RUNTIME_DIR", filepath.Join(dir, "run"))
+
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newBin := scriptFor("host-2")
+	doc := &builds.HostIndex{Schema: 1, Sequence: 1}
+	if err := doc.Set("host-2", map[string]string{"amd64": hexSum(newBin), "arm64": hexSum(append(newBin, '\n'))}); err != nil {
+		t.Fatal(err)
+	}
+	doc.GeneratedAt = time.Now().UTC()
+	raw, _ := builds.MarshalHost(doc)
+	sig := builds.SignHost(priv, raw)
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/list/host.json":
+			_, _ = w.Write(raw)
+		case r.URL.Path == "/list/host.json.sig":
+			_, _ = w.Write([]byte(sig))
+		case strings.HasPrefix(r.URL.Path, "/dl/host-2/lucx-plugin-host-linux-amd64"):
+			_, _ = w.Write(newBin)
+		case strings.HasPrefix(r.URL.Path, "/dl/host-2/lucx-plugin-host-linux-arm64"):
+			_, _ = w.Write(append(newBin, '\n'))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer source.Close()
+
+	exe := filepath.Join(dir, "lucx-plugin-host")
+	if err := os.WriteFile(exe, scriptFor("host-1"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config{
+		StateDir: filepath.Join(dir, "state"), Socket: filepath.Join(dir, "host.sock"), Gateway: freeAddr(t),
+		PanelSocket: filepath.Join(dir, "panel.sock"), Version: "host-1",
+		Exe: exe, UpdateBase: source.URL + "/list", UpdateKeys: []ed25519.PublicKey{pub}, DownloadBase: source.URL + "/dl",
+	}
+	done := make(chan error, 1)
+	go func() { done <- run(context.Background(), cfg, newUpdater(cfg)) }()
+	client := &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, "unix", cfg.Socket)
+	}}, Timeout: 10 * time.Second}
+	call := func(method, path string) (bool, string, json.RawMessage) {
+		req, _ := http.NewRequest(method, "http://host"+path, nil)
+		resp, err := client.Do(req)
+		if err != nil {
+			return false, err.Error(), nil
+		}
+		defer resp.Body.Close()
+		var m struct {
+			Success bool            `json:"success"`
+			Msg     string          `json:"msg"`
+			Obj     json.RawMessage `json:"obj"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&m)
+		return m.Success, m.Msg, m.Obj
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if ok, _, _ := call(http.MethodGet, "/panel/api/plugins/system"); ok {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the host did not come up")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	if ok, msg, obj := call(http.MethodPost, "/panel/api/plugins/system/check"); !ok {
+		t.Fatalf("check: %s", msg)
+	} else {
+		_ = obj
+	}
+	_, _, obj := call(http.MethodGet, "/panel/api/plugins/system")
+	var st hostupdate.Status
+	if err := json.Unmarshal(obj, &st); err != nil || !st.Managed || st.Version != "host-1" || st.Available != "host-2" {
+		t.Fatalf("status after the check = %+v (%v)", st, err)
+	}
+	if ok, msg, _ := call(http.MethodPost, "/panel/api/plugins/system/update"); !ok {
+		t.Fatalf("update: %s", msg)
+	}
+	select {
+	case err := <-done:
+		if !errors.Is(err, errRestart) {
+			t.Errorf("run returned %v, want it to ask for a restart", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the host did not stop for the restart")
+	}
+	if got, _ := os.ReadFile(exe); string(got) != string(newBin) {
+		t.Errorf("binary on disk = %q, want the new release", got)
+	}
+	if prev, _ := os.ReadFile(exe + ".prev"); string(prev) != string(scriptFor("host-1")) {
+		t.Errorf("previous binary = %q", prev)
+	}
+}
+
+func TestADevelopmentBuildDoesNotUpdateItself(t *testing.T) {
+	cfg := config{StateDir: t.TempDir(), Version: "dev", Exe: "/nowhere/lucx-plugin-host"}
+	if st := newUpdater(cfg).Status(); st.Managed {
+		t.Errorf("a dev build is managed: %+v", st)
+	}
+	cfg.Version = "host-4"
+	if st := newUpdater(cfg).Status(); !st.Managed {
+		t.Errorf("a release is not managed: %+v", st)
+	}
+	cfg.Exe = ""
+	if st := newUpdater(cfg).Status(); st.Managed {
+		t.Errorf("a host that does not know its own file is managed: %+v", st)
 	}
 }

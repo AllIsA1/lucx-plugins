@@ -13,8 +13,16 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/AllIsA1/lucx-plugins/internal/hostupdate"
 	"github.com/AllIsA1/lucx-plugins/internal/plugins"
 )
+
+// SystemUpdater is the part of the host that replaces the host itself with a newer build.
+type SystemUpdater interface {
+	Status() hostupdate.Status
+	Check(ctx context.Context) error
+	Apply(ctx context.Context) error
+}
 
 // PluginService exposes the plugin manager to the web layer. The manager may be
 // absent (safe mode, corrupt registry); State still answers so the UI can say why.
@@ -23,6 +31,10 @@ type PluginService struct {
 	Supervisor func() *plugins.Supervisor
 	// UpdateHealthTimeout is how long an updated process gets to become healthy before the update is undone.
 	UpdateHealthTimeout time.Duration
+	// Updater replaces the host itself; nil means this host does not update itself.
+	Updater SystemUpdater
+	// RestartHost ends the process so it can start again as the new build; it is called after the update was answered.
+	RestartHost func()
 }
 
 const defaultUpdateHealthTimeout = 30 * time.Second

@@ -15,6 +15,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/AllIsA1/lucx-plugins/internal/hostupdate"
 	"github.com/AllIsA1/lucx-plugins/internal/plugins"
 )
 
@@ -55,6 +56,9 @@ func NewPluginsController(g *gin.RouterGroup, svc *PluginService) *PluginsContro
 	g.POST("/update/:id", a.update)
 	g.POST("/rollback/:id", a.rollback)
 	g.GET("/logs/:id", a.logs)
+	g.GET("/system", a.systemStatus)
+	g.POST("/system/check", a.systemCheck)
+	g.POST("/system/update", a.systemUpdate)
 	g.GET("/x/:id/*path", a.proxy)
 	g.POST("/x/:id/*path", a.proxy)
 	g.PUT("/x/:id/*path", a.proxy)
@@ -409,4 +413,45 @@ func extendWriteDeadline(c *gin.Context, d time.Duration) {
 		}
 	}
 	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(d))
+}
+
+// restartDelay lets the answer to the update request leave before the host stops serving.
+const restartDelay = 400 * time.Millisecond
+
+func (a *PluginsController) systemStatus(c *gin.Context) {
+	if a.svc.Updater == nil {
+		jsonObj(c, hostupdate.Status{}, nil)
+		return
+	}
+	jsonObj(c, a.svc.Updater.Status(), nil)
+}
+
+func (a *PluginsController) systemCheck(c *gin.Context) {
+	if a.svc.Updater == nil {
+		jsonMsg(c, "plugins: this plugin system build does not update itself", errors.New("not managed"))
+		return
+	}
+	extendWriteDeadline(c, pluginRestartTimeout+pluginSlack)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(c.Request.Context()), pluginRestartTimeout)
+	defer cancel()
+	done(c, "plugins: cannot check for a newer plugin system", a.svc.Updater.Check(ctx))
+}
+
+func (a *PluginsController) systemUpdate(c *gin.Context) {
+	if a.svc.Updater == nil {
+		jsonMsg(c, "plugins: this plugin system build does not update itself", errors.New("not managed"))
+		return
+	}
+	extendWriteDeadline(c, pluginPreviewTimeout+pluginSlack)
+	// A browser that gives up must not leave a half-installed binary behind.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(c.Request.Context()), pluginPreviewTimeout)
+	defer cancel()
+	if err := a.svc.Updater.Apply(ctx); err != nil {
+		jsonMsg(c, "plugins: cannot update the plugin system", err)
+		return
+	}
+	done(c, "", nil)
+	if a.svc.RestartHost != nil {
+		time.AfterFunc(restartDelay, a.svc.RestartHost)
+	}
 }
