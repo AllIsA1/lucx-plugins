@@ -9,9 +9,9 @@ the catalog does not list.
 
 - The catalog is two files, `index.json` and `index.json.sig`: an ed25519 signature over the exact bytes of
   `index.json` (with a fixed prefix, so the signature cannot be reused for anything else). It is checked against the
-  public keys built into the panel. A mirror can serve the files but cannot change them.
-- The panel ships with two public keys, the current one and a spare, so a key can be rotated by shipping the spare in a
-  panel release (`builtinCatalogKeys` in `internal/lucx/plugins/catalog_keys.go`). A self-hosted catalog is trusted by
+  public keys built into the plugin system. A mirror can serve the files but cannot change them.
+- The plugin system ships with two public keys, the current one and a spare, so a key can be rotated by shipping the spare in a
+  release of the service (`builtinCatalogKeys` in `internal/plugins/catalog_keys.go`). A self-hosted catalog is trusted by
   adding its public key to `XUI_PLUGINS_CATALOG_KEYS` (comma separated, base64). With no key at all the catalog is simply
   off ("unconfigured"). An address that answers 404 for `index.json` (nothing published there yet) is shown as "not
   published yet", not as an error; a missing `index.json.sig` next to a present index is an error.

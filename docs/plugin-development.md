@@ -1,9 +1,15 @@
 # Writing a LucX-UI plugin
 
 A plugin is a GitHub repository with a `lucx-plugin.json` at its root and, for plugins that run code, the
-compiled binaries. The panel downloads the repository at one commit, shows the operator what the plugin asks
-for, and only installs it after they confirm exactly those permissions. A plugin never modifies panel files;
-removing it restores the panel to its previous state.
+compiled binaries. The plugin system downloads the repository at one commit, shows the operator what the plugin asks
+for (on the panel's Plugins page), and only installs it after they confirm exactly those permissions. A plugin never
+modifies panel files; removing it restores the panel to its previous state.
+
+**Where things run.** The plugin system is a service of its own (`lucx-plugins-host`) next to the panel. It installs, starts and
+confines plugins and keeps their permissions; the panel only shows the Plugins page, forwards requests to the service and
+hands it panel events. So: a plugin keeps running when the panel restarts and when the service restarts or updates itself; the
+address in `$LUCX_PANEL_URL` is the service's loopback gateway (default `127.0.0.1:19480`), which forwards the calls the plugin
+has permission for to the panel; and this document says "the panel" where the operator sees the panel and the Plugins page.
 
 `examples/hello-plugin` is a complete, working plugin (requests, panel API, events, a page that calls its own backend); `examples/block-ads-plugin` shows a pipeline plugin; `examples/ui-hello` is a page-only plugin with no process. Copy one to start. It is MIT-licensed (see its `LICENSE`), so you may use and relicense it freely; your plugin's own license is your choice.
 
@@ -63,19 +69,19 @@ permission.
 
 ## How a plugin runs
 
-The panel starts the executable as its own unprivileged user. How well it is confined depends on the host; the panel shows
-the level on the Plugins page.
+The plugin system service starts the executable as its own unprivileged user. How well it is confined depends on the host; the
+Plugins page shows the level.
 
 | Host | Runner | Confinement |
 |---|---|---|
-| Linux with systemd (default) | transient systemd service | **strong**: own dynamic user, read-only system, private `/tmp`, no capabilities, memory/CPU/task caps, **no network** except the panel on this machine unless the plugin holds `network`. Keeps running when the panel restarts; the panel picks it up again. |
-| Docker image (`XUI_IN_DOCKER=true`), or `XUI_PLUGINS_RUNNER=process` on a host without systemd | child process of the panel (the panel must run as root) | **partial**: own unprivileged user per plugin, no supplementary groups, `no_new_privs`, no capabilities, limits on memory (data segment), processes and files. Outgoing connections are **not** filtered, so the `network` permission is not enforced, and files readable by every user stay readable. The plugin stops when the panel stops and is started again with it. |
+| Linux with systemd (default) | transient systemd service | **strong**: own dynamic user, read-only system, private `/tmp`, no capabilities, memory/CPU/task caps, **no network** except the plugin system's gateway on this machine unless the plugin holds `network`. Keeps running when the panel or the service restarts; the service picks it up again. |
+| Docker image (`XUI_IN_DOCKER=true`), or `XUI_PLUGINS_RUNNER=process` on a host without systemd | child process of the plugin system service (it must run as root) | **partial**: own unprivileged user per plugin, no supplementary groups, `no_new_privs`, no capabilities, limits on memory (data segment), processes and files. Outgoing connections are **not** filtered, so the `network` permission is not enforced, and files readable by every user stay readable. The plugin stops when the service stops and is started again with it. |
 
 In every case:
 
 * it should write only to its **state directory** (`$STATE_DIRECTORY`, `/var/lib/x-ui-plugins/<id>`; in Docker
   `/etc/x-ui/plugins-data/<id>`, on the volume); its code is read-only;
-* if it crashes repeatedly the panel switches it off and shows why.
+* if it crashes repeatedly the plugin system switches it off and shows why.
 
 Declare only the permissions you need: on the process runner the panel cannot enforce the ones you leave out, so an honest
 manifest is what the admin relies on. `XUI_PLUGINS_RUNNER` takes `systemd`, `systemd-user` (development without root) or `process`; the process runner keeps
@@ -269,9 +275,11 @@ the error says so (install it again once the cause is fixed).
 
 ## Calling the panel
 
-The panel gives the plugin an API token: the address is in `$LUCX_PANEL_URL`, the token in the file
-`$CREDENTIALS_DIRECTORY/panel-token`. Send it as `Authorization: Bearer <token>` to `/panel/api/...`.
-Only routes covered by the plugin's permissions answer; everything else returns 403. The token stops working the
+The plugin system gives the plugin an API token: the address (the service's loopback gateway, which passes the call on to
+the panel) is in `$LUCX_PANEL_URL`, the token in the file `$CREDENTIALS_DIRECTORY/panel-token`. Send it as
+`Authorization: Bearer <token>` to `/panel/api/...`. Only routes covered by the plugin's permissions answer; everything else
+returns 403 (the gateway forwards a call with the list of routes this plugin may use, and the panel checks the route it
+resolved against that list). The token stops working the
 moment the plugin is disabled, updated or its permissions change. Answers use the panel envelope
 `{"success": true, "msg": "", "obj": …}`. `Panel` in `lucxplugin.go` wraps this.
 

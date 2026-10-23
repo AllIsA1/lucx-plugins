@@ -2,7 +2,7 @@
 
 ## The plugin system is MIT: use it however you like
 
-Everything this repository adds (the plugin system, the installer, the build tooling, the examples) is under the
+Everything this repository adds (the plugin system and its service binary `lucx-plugin-host`, the installer, the build tooling, the examples) is under the
 [MIT License](LICENSE). The author does not mind how you use it: personal or commercial, modified or not, no permission needed.
 Keep the copyright notice.
 
@@ -17,7 +17,7 @@ them.
 
 ## What stays under other licenses
 
-- `overlay/base/` and `overlay/modified/` are copies of about twenty LucX-UI/3x-ui source files: `base/` as they are upstream,
+- `overlay/base/` and `overlay/modified/` are copies of seventeen LucX-UI/3x-ui source files: `base/` as they are upstream,
   `modified/` with the small integration hooks the plugin system needs (marked `LUCX-HOOK`). They keep the license of the file
   they come from (GPL-3.0, text in [LICENSE-GPL-3.0.txt](LICENSE-GPL-3.0.txt), unless a file says otherwise).
 - Plugins installed through the plugin system are separate programs under their authors' licenses.

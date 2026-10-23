@@ -3,23 +3,30 @@
 The plugin system for the [LucX-UI](https://github.com/AlexeyLCP/lucx-ui) panel, kept as an **overlay**: this repository is not
 a fork. It holds what the plugin system adds to a LucX-UI release, and a build that lays it over each upstream release.
 
-> Status: stages 7a–7c of the plugin system (the overlay, the automatic build and signed list, the installer). Publishing builds is
-> still switched off, so the installer has nothing to download yet; do not use it on a real server until this note is gone.
+## What a user gets
 
-## What a user will get
+One command on a server that already runs the panel. Afterwards the panel has a **Plugins** page, plugins run as services of
+their own, and the plugin system updates from a button on that page without restarting the panel. Updating the panel the usual
+way (`x-ui update`) keeps the plugin system. Removing it puts the original panel binary back; the panel's own data is never
+touched.
 
-One command on a server that already runs the panel, then a restart, and the panel has a **Plugins** page. Updating the panel
-the usual way (`x-ui update`) keeps the plugin system. Removing it puts the original panel binary back; the panel's own data is
-never touched. (Installer: stage 7c.)
+## How it works: two parts
 
-## How it works
+**The panel build.** The panel is one compiled binary with its web interface embedded, so what the plugin system needs inside
+it arrives as a rebuilt binary. That part is small: the Plugins page and the menu entries and pages plugins add, a proxy that
+forwards `/panel/api/plugins/*` and plugin pages to the service, a socket on which the service calls the panel's API for a plugin
+(only the routes that plugin was granted), and the hooks that hand panel events and the generated Xray configuration to the
+service. This repository builds it for every upstream release (upstream source plus the overlay) and publishes a signed list
+mapping the hash of each original `x-ui` to the matching build. On the server a small program recognises the original by its hash
+and swaps in the build. A binary it does not recognise is never replaced.
 
-The panel is one compiled binary with its web interface embedded, so the plugin system can only arrive as a rebuilt binary. This
-repository builds it automatically for every upstream release from the upstream source plus the overlay, and publishes a signed
-list that maps the hash of each original `x-ui` to the matching build. On the server a small script recognises the original by
-its hash and swaps in the build with plugins. A binary it does not recognise is never replaced.
+**The plugin system service** (`lucx-plugins-host.service`, the binary `lucx-plugin-host`). Everything else: installing, running
+and confining plugins, permissions, the catalog, updates of plugins, the management of plugins on nodes. It is a separate
+program with its own releases (`host-N`, recorded in the signed `host.json`), so it can be updated, by the button on the Plugins
+page, without rebuilding or restarting the panel. A new binary that fails to start is replaced by the previous one. Without the
+service the panel is exactly the panel it would be without plugins.
 
-## Installing (when builds are published)
+## Installing
 
 On a server that already runs LucX-UI under systemd, as root:
 
@@ -28,34 +35,48 @@ curl -fL https://raw.githubusercontent.com/AllIsA1/lucx-plugins/main/installer/i
 ```
 
 Pass options after `bash -s --`, for example `… | sudo bash -s -- --no-restart`. (Do not use `sudo bash <(curl …)`: sudo does not pass that file
-descriptor on. As root, drop the `sudo`.) Options: `--service NAME` (default `x-ui`), `--panel PATH`, `--restart-at HH:MM` (default `04:00`), `--no-restart`.
+descriptor on. As root, drop the `sudo`.) Options: `--service NAME` (default `x-ui`), `--panel PATH`, `--restart-at HH:MM` (default `04:00`),
+`--no-restart`, `--gateway 127.0.0.1:PORT` (where plugins reach the panel's API; loopback only, default `127.0.0.1:19480`).
 
-It installs `lucx-plugins-sync` in `/usr/local/lucx-plugins`, a systemd drop-in `x-ui.service.d/30-lucx-plugins.conf` that runs it
-before every start of the panel (`ExecStartPre=-+…`: it cannot stop the panel from starting), and two timers: one checks for new
-builds every 30 minutes, the other restarts the panel at the quiet hour when a build is waiting. If a build for the installed panel
-exists, the panel restarts once and has the **Plugins** page. After `x-ui update` the new original is recognised at the next start and
-swapped again, or, if our build for that release is not published yet, at the first quiet hour after it is.
+It installs, in `/usr/local/lucx-plugins`:
+
+- `lucx-plugins-sync`, the program that keeps the panel binary in step with the signed list. A systemd drop-in
+  `x-ui.service.d/30-lucx-plugins.conf` runs it before every start of the panel (`ExecStartPre=-+…`: it cannot stop the panel
+  from starting); two timers check for new builds every 30 minutes and restart the panel at the quiet hour when a build is waiting.
+- `lucx-plugin-host`, the service, fetched by `lucx-plugins-sync host-install` from the signed `host.json` (signature, hash and a
+  trial run are checked) and started as `lucx-plugins-host.service`. Its unit restarts it if it stops, leaves plugin processes
+  running when it stops, and runs `lucx-plugins-sync host-guard` before each start to roll back a failed update.
+
+If the service cannot be installed the installer stops before it changes anything else. After `x-ui update` the new original panel
+binary is recognised at the next start and swapped again, or, if our build for that release is not published yet, at the first
+quiet hour after it is.
 
 ```
 curl -fL https://raw.githubusercontent.com/AllIsA1/lucx-plugins/main/installer/uninstall.sh | sudo bash -s -- [--purge]
 ```
 
-puts the original binary back (from the copy it kept, or from the upstream release, checked against the signed hash) and removes
-everything it installed. Plugins and their data stay unless `--purge` is given. The panel's own data is never touched.
+stops the service and the plugins it started, puts the original binary back (from the copy it kept, or from the upstream release,
+checked against the signed hash) and removes everything it installed. Plugins and their data stay unless `--purge` is given. The
+panel's own data is never touched.
 
-`lucx-plugins-sync status` says what it did and the last problem it met. `/etc/lucx-plugins/config` (`PANEL_BINARY`, `SERVICE`,
-`STATE_DIR`, `RESTART_AT`, `INDEX_URL`) is created once and then left alone; `LUCX_PLUGINS_INDEX_URL` or `INDEX_URL` points the
-program at a mirror of the signed list.
+`lucx-plugins-sync status` says what it did to the panel binary and the last problem it met; `systemctl status
+lucx-plugins-host` and `journalctl -u lucx-plugins-host` say how the service is doing. `/etc/lucx-plugins/config` (`PANEL_BINARY`,
+`SERVICE`, `STATE_DIR`, `RESTART_AT`, `INDEX_URL`) and `/etc/lucx-plugins/host.env` (`LUCX_HOST_GATEWAY`) are created once and then
+left alone; `LUCX_PLUGINS_INDEX_URL` or `INDEX_URL` points the program at a mirror of the signed list. Plugins installed with the
+earlier, built-in version of the plugin system are not migrated: install them again from the Plugins page.
 
 ### What it trusts
 
 - A panel binary is replaced only if its sha256 is listed as an upstream original in `builds.json`, the list's ed25519 signature
   verifies against the keys built into the program (`keys/builds.pub`), and the build's archive and binary hashes match the list.
   Any other binary, including your own build, is never touched.
-- The list only ever grows (`sequence`): an older, validly signed list is ignored. The last good list is cached, so the check
-  keeps working offline. A new binary must print its version before it is installed.
-- `install.sh` and the program itself are downloaded over HTTPS from this repository, the same trust the panel's own installer
-  has in its repository.
+- The service binary comes only from `host.json`, signed by the same keys under a different domain (a signature of one list is
+  never valid for the other), whose `sequence` only grows and whose releases are never rewritten. The hash is checked and the
+  binary must print the version the list names before it is installed or replaces the running one.
+- The lists only ever grow: an older, validly signed list is ignored. The last good `builds.json` is cached, so the check keeps
+  working offline.
+- `install.sh` and `lucx-plugins-sync` are downloaded over HTTPS from this repository, the same trust the panel's own installer has
+  in its repository; everything the sync program then installs is verified by signature.
 
 Limits: systemd only (no OpenRC, no Docker yet); the panel restarts once when the plugin build arrives, at the chosen hour unless
 the installer finds a build right away.
@@ -64,8 +85,8 @@ the installer finds a build right away.
 
 ```
 overlay/BASE         the upstream release the overlay was made from
-overlay/files/       files the plugin system adds (backend, pages, tools, docs, examples)
-overlay/modified/    the plugin system's version of each upstream file it changes (about 20, small hook blocks marked LUCX-HOOK)
+overlay/files/       files the plugin system adds to the panel (the link to the service, the Plugins page, tests)
+overlay/modified/    the plugin system's version of each upstream file it changes (17, small hook blocks marked LUCX-HOOK)
 overlay/base/        the upstream version of those files the changes were made against (common ancestor for the merge)
 overlay/locales/     only the translation keys the plugin system adds, one file per language
 overlay/exclude.txt  paths that are never exported or applied
@@ -87,7 +108,12 @@ tests/run.sh                        round trip (apply, then export, must reprodu
 
 `LUCX_UPSTREAM` points the scripts at another copy of the upstream repository (a path or URL).
 
-## Automatic builds
+The service itself lives in this repository's own Go packages (`cmd/lucx-plugin-host`, `internal/plugins`, `internal/hostapi`,
+`internal/hostupdate`); the examples, the plugin documentation and the catalog tool (`cmd/plugincatalog`) are here too. Tests of this
+repository also keep the two sides in step by reading the overlay: the routes the panel forwards, the pages a plugin may replace,
+the icons the examples use, the calls a master may make on a node.
+
+## Automatic builds of the panel
 
 `.github/workflows/build.yml` runs every hour. For each upstream release newer than `build/since` that has no build yet it applies
 the overlay, builds the frontend, runs the tests, builds static `amd64` and `arm64` binaries the way the upstream release workflow
@@ -98,6 +124,14 @@ release `<upstream tag>-plugins.<n>` and adds both builds to `builds.json` on th
 Publishing needs the repository variable `PUBLISH_ENABLED=true`; a manual run also has to pass `publish`. `workflow_dispatch` with
 `tag` builds one release without publishing. `builds.json` is managed with `go run ./cmd/buildsctl`; its entries map the hash of an
 original `x-ui` to our build of the same release, and the sequence number only grows.
+
+## Releases of the service
+
+`.github/workflows/host.yml` builds and tests the service on every change to its code. A release is made **by hand**: run the
+workflow with `publish` on (it also needs `PUBLISH_ENABLED=true` and the `BUILDS_SIGNING_KEY` secret). It builds static, reproducible
+`amd64` and `arm64` binaries named `host-N` (`scripts/build-host.sh`), creates the release `host-N` and records it in the signed
+`host.json` on the `builds` branch (`scripts/host-list.sh`, which touches the branch only after the signature verifies against
+`keys/builds.pub`). Servers update to it from the Plugins page; a release is never changed afterwards.
 
 ## License
 
