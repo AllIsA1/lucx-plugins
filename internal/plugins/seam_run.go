@@ -94,17 +94,17 @@ type seamEnvelope struct {
 // SeamPreResult is what the panel does before its own handler: answer with Response, or carry on
 // with Request (possibly changed).
 type SeamPreResult struct {
-	Responded bool
-	Request   SeamRequest
-	Response  SeamResponse
-	Failures  int
+	Responded bool         `json:"responded"`
+	Request   SeamRequest  `json:"request"`
+	Response  SeamResponse `json:"response"`
+	Failures  int          `json:"failures"`
 }
 
 // SeamPostResult is the response the panel sends after its own handler.
 type SeamPostResult struct {
-	Response SeamResponse
-	Changed  bool
-	Failures int
+	Response SeamResponse `json:"response"`
+	Changed  bool         `json:"changed"`
+	Failures int          `json:"failures"`
 }
 
 // SeamTableRow tells the panel where seams exist, so it can skip the call when nobody listens.
