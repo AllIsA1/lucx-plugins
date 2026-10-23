@@ -5,6 +5,7 @@ package hostlink
 
 import (
 	"context"
+	"net/http"
 	"sync"
 
 	"github.com/gin-gonic/gin"
@@ -38,6 +39,11 @@ func SetShared(l *Link) {
 
 // Start begins talking to the host. It never fails and never blocks.
 func Start() { Shared().Start() }
+
+// ServeInternal opens the socket plugins reach the panel API through; basePath is the panel's web base path.
+func ServeInternal(engine http.Handler, basePath func() string) error {
+	return Shared().ServeInternal(engine, basePath)
+}
 
 // Stop ends it.
 func Stop() { Shared().Stop() }

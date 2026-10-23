@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"sync"
 	"testing"
@@ -226,4 +227,27 @@ func TestTransformToADeadHostKeepsTheDocument(t *testing.T) {
 	if got := l.Transform(context.Background(), "xray.config", []byte("doc")); string(got) != "doc" {
 		t.Errorf("Transform = %q", got)
 	}
+}
+
+func TestAHostThatStartsLaterIsFoundQuickly(t *testing.T) {
+	old := retryInterval
+	retryInterval = 30 * time.Millisecond
+	defer func() { retryInterval = old }()
+
+	sock := socketPath(t, "late.sock")
+	l := newLink(t, sock)
+	l.Start()
+	time.Sleep(100 * time.Millisecond) // several failed handshakes
+	if l.Status().Connected {
+		t.Fatal("connected to nothing")
+	}
+	s := &hostState{api: IntegrationAPI, events: []string{"client.created"}}
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := &http.Server{Handler: s.handler()}
+	go func() { _ = srv.Serve(ln) }()
+	defer srv.Close()
+	waitFor(t, func() bool { return l.Wanted("client.created") })
 }

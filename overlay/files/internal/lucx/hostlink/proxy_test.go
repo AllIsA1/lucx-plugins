@@ -4,13 +4,22 @@
 package hostlink
 
 import (
+	"bytes"
+	stdgzip "compress/gzip"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/gin-contrib/gzip"
+	"github.com/gin-contrib/sessions"
+	"github.com/gin-contrib/sessions/cookie"
+	"github.com/gin-gonic/gin"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/web/middleware"
 )
@@ -244,5 +253,46 @@ func TestRegisteredRoutesAreTheHostsRoutes(t *testing.T) {
 	sort.Strings(got)
 	if strings.Join(got, "\n")+"\n" != string(want) {
 		t.Errorf("registered routes differ from testdata/routes.golden (the host's table):\n%s", strings.Join(got, "\n"))
+	}
+}
+
+func TestACompressedAnswerKeepsNoStaleLength(t *testing.T) {
+	big := strings.Repeat(`{"success":true,"msg":"","obj":"padding padding padding"}`, 50)
+	l := newLink(t, fakeHost(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Length", strconv.Itoa(len(big)))
+		_, _ = w.Write([]byte(big))
+	})))
+	e := gin.New()
+	e.Use(sessions.Sessions("t", cookie.NewStore([]byte("secret"))), gzip.Gzip(gzip.DefaultCompression))
+	l.RegisterAdmin(e.Group("/panel/api/plugins"))
+	srv := httptest.NewServer(e)
+	defer srv.Close()
+
+	client := &http.Client{Transport: &http.Transport{DisableCompression: true}}
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/panel/api/plugins/list", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("the body was cut off: %v", err)
+	}
+	if resp.Header.Get("Content-Encoding") != "gzip" {
+		t.Fatalf("the panel did not compress (%q), the test would prove nothing", resp.Header.Get("Content-Encoding"))
+	}
+	if cl := resp.Header.Get("Content-Length"); cl != "" && cl != strconv.Itoa(len(raw)) {
+		t.Errorf("Content-Length %s for a body of %d bytes", cl, len(raw))
+	}
+	zr, err := stdgzip.NewReader(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain, _ := io.ReadAll(zr)
+	if string(plain) != big {
+		t.Errorf("decompressed body differs (%d bytes, want %d)", len(plain), len(big))
 	}
 }

@@ -668,6 +668,11 @@ func (s *Server) start(restartXray bool, startTgBot bool) (err error) {
 	}
 
 	go network.ServeHTTP(s.httpServer, listener, "Web server")
+	// LUCX-HOOK: the socket plugins reach the panel API through (opened by the plugin host's gateway).
+	if err := hostlink.ServeInternal(engine, func() string { bp, _ := s.settingService.GetBasePath(); return bp }); err != nil {
+		logger.Warning("plugins: cannot open the internal API socket:", err)
+	}
+	// END LUCX-HOOK
 
 	// Create event bus before startTask so jobs can use it
 	s.bus = eventbus.New(eventbus.DefaultBufferSize)

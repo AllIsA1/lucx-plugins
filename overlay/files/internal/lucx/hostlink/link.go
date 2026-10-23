@@ -33,9 +33,15 @@ const (
 	disabledEnv = "XUI_PLUGINS_DISABLED"
 
 	callTimeout     = 3 * time.Second
-	refreshInterval = 15 * time.Second
 	eventQueueSize  = 256
 	maxPipelineBody = 16 << 20
+)
+
+// How often the handshake runs: slowly while the host answers, quickly while it does not, so a
+// restarted host gets its events again within seconds.
+var (
+	refreshInterval = 15 * time.Second
+	retryInterval   = 2 * time.Second
 )
 
 // Config says where the two unix sockets are.
@@ -88,10 +94,11 @@ type Link struct {
 	events chan []byte
 	kick   chan struct{}
 
-	mu     sync.Mutex
-	cancel context.CancelFunc
-	done   sync.WaitGroup
-	warned atomic.Int64 // unix seconds of the last "dropped" warning
+	mu           sync.Mutex
+	stopInternal func()
+	cancel       context.CancelFunc
+	done         sync.WaitGroup
+	warned       atomic.Int64 // unix seconds of the last "dropped" warning
 }
 
 // New builds a link; nothing runs until Start.
@@ -138,12 +145,37 @@ func (l *Link) Start() {
 	go l.sendLoop(ctx)
 }
 
-// Stop ends the loops. Queued events are dropped.
+// ServeInternal opens the internal API socket in front of the panel's engine, so the host can call the
+// panel on behalf of plugins. It does nothing when the integration is switched off.
+func (l *Link) ServeInternal(engine http.Handler, basePath func() string) error {
+	if l.cfg.Disabled {
+		return nil
+	}
+	stop, err := ListenInternal(l.cfg.InternalSocket, InternalHandler(engine, basePath))
+	if err != nil {
+		return err
+	}
+	l.mu.Lock()
+	previous := l.stopInternal
+	l.stopInternal = stop
+	l.mu.Unlock()
+	if previous != nil {
+		previous()
+	}
+	return nil
+}
+
+// Stop ends the loops and closes the internal socket. Queued events are dropped.
 func (l *Link) Stop() {
 	l.mu.Lock()
 	cancel := l.cancel
 	l.cancel = nil
+	stopInternal := l.stopInternal
+	l.stopInternal = nil
 	l.mu.Unlock()
+	if stopInternal != nil {
+		stopInternal()
+	}
 	if cancel == nil {
 		return
 	}
@@ -221,14 +253,19 @@ func (l *Link) Kick() {
 func (l *Link) refreshLoop(ctx context.Context) {
 	defer l.done.Done()
 	l.Refresh(ctx)
-	t := time.NewTicker(refreshInterval)
-	defer t.Stop()
 	for {
+		wait := refreshInterval
+		if !l.Status().Compatible {
+			wait = retryInterval
+		}
+		timer := time.NewTimer(wait)
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			return
-		case <-t.C:
+		case <-timer.C:
 		case <-l.kick:
+			timer.Stop()
 			// Let the change that caused the kick finish first.
 			select {
 			case <-ctx.Done():

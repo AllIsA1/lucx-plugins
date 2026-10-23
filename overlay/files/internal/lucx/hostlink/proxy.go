@@ -118,6 +118,10 @@ func (l *Link) forward(stripPrefix, hostPrefix string) gin.HandlerFunc {
 		ModifyResponse: func(resp *http.Response) error {
 			// A page served from the panel's origin must not be able to set the panel's cookies.
 			resp.Header.Del("Set-Cookie")
+			// The panel compresses what it sends, so the host's length would be wrong for the body that
+			// goes out: browsers cut such a response off.
+			resp.Header.Del("Content-Length")
+			resp.ContentLength = -1
 			return nil
 		},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {

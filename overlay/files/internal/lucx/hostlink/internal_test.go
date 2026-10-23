@@ -202,3 +202,35 @@ func TestTheInternalSocketIsPrivateAndWorks(t *testing.T) {
 		t.Fatal("unreachable")
 	}
 }
+
+func TestLinkServesTheInternalSocketUntilStopped(t *testing.T) {
+	e, _ := miniPanel("/b", &model.User{Username: "boss"})
+	l := New(Config{HostSocket: socketPath(t, "h.sock"), InternalSocket: socketPath(t, "run/panel.sock")})
+	if err := l.ServeInternal(e, func() string { return "/b" }); err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, "unix", l.cfg.InternalSocket)
+	}}}
+	req, _ := http.NewRequest(http.MethodGet, "http://panel/panel/api/clients/list", nil)
+	hostCaller("GET /clients/list", "p")(req)
+	resp, err := client.Do(req)
+	if err != nil || resp.StatusCode != 200 {
+		t.Fatalf("call through the socket = %v, %v", resp, err)
+	}
+	resp.Body.Close()
+	l.Stop()
+	if _, err := os.Stat(l.cfg.InternalSocket); !os.IsNotExist(err) {
+		t.Errorf("socket still there after Stop: %v", err)
+	}
+}
+
+func TestSwitchedOffThereIsNoInternalSocket(t *testing.T) {
+	l := New(Config{HostSocket: socketPath(t, "h.sock"), InternalSocket: socketPath(t, "run/panel.sock"), Disabled: true})
+	if err := l.ServeInternal(http.NotFoundHandler(), func() string { return "" }); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(l.cfg.InternalSocket); !os.IsNotExist(err) {
+		t.Errorf("a switched-off integration opened %s", l.cfg.InternalSocket)
+	}
+}
