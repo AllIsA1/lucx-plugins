@@ -30,7 +30,7 @@ if [[ $tag == "$(cut -d' ' -f1 "$ROOT/overlay/BASE")" ]]; then
 fi
 
 # 2. the applied tree has the plugin system, and every locale still parses with the plugin keys.
-if [[ -f $work/rt/internal/lucx/plugins/manager.go && -f $work/rt/frontend/src/pages/plugins/PluginsPage.tsx ]]; then ok "plugin files are in place"
+if [[ -f $work/rt/internal/lucx/hostlink/link.go && -f $work/rt/frontend/src/pages/plugins/PluginsPage.tsx ]]; then ok "plugin files are in place"
 else bad "plugin files are in place"; fi
 if python3 - "$work/rt" << 'PY'
 import json, sys, glob, os
@@ -54,16 +54,16 @@ else bad "a colliding file fails the apply" "$(cat "$work/collision.err")"; fi
 
 # 4. an upstream change next to ours is a conflict that names the file and leaves it untouched.
 fresh "$work/conflict"
-sed -i 's/^\tloadServiceEnvFile()$/\tloadServiceEnvFile() \/\/ changed upstream/' "$work/conflict/main.go"
-before=$(sha256sum "$work/conflict/main.go")
+sed -i 's/^\tengine, err := s.initRouter()$/\tengine, err := s.initRouter() \/\/ changed upstream/' "$work/conflict/internal/web/web.go"
+before=$(sha256sum "$work/conflict/internal/web/web.go")
 if "$ROOT/scripts/apply.sh" "$work/conflict" > /dev/null 2> "$work/conflict.err"; then bad "a conflicting upstream change fails the apply"
-elif grep -q "conflict: main.go" "$work/conflict.err" && [[ $before == "$(sha256sum "$work/conflict/main.go")" ]]; then ok "a conflicting upstream change fails the apply and leaves the file untouched"
+elif grep -q "conflict: internal/web/web.go" "$work/conflict.err" && [[ $before == "$(sha256sum "$work/conflict/internal/web/web.go")" ]]; then ok "a conflicting upstream change fails the apply and leaves the file untouched"
 else bad "a conflicting upstream change fails the apply" "$(cat "$work/conflict.err")"; fi
 
 # 5. an upstream change far from ours merges cleanly and keeps both.
 fresh "$work/merge"
-sed -i '1i // an unrelated upstream edit at the top of the file' "$work/merge/main.go"
-if "$ROOT/scripts/apply.sh" "$work/merge" > /dev/null 2>&1 && grep -q "an unrelated upstream edit" "$work/merge/main.go" && grep -q "plugins.ExecCommand" "$work/merge/main.go"; then ok "an unrelated upstream change merges with ours"
+sed -i '1i // an unrelated upstream edit at the top of the file' "$work/merge/internal/web/web.go"
+if "$ROOT/scripts/apply.sh" "$work/merge" > /dev/null 2>&1 && grep -q "an unrelated upstream edit" "$work/merge/internal/web/web.go" && grep -q "hostlink.Start()" "$work/merge/internal/web/web.go"; then ok "an unrelated upstream change merges with ours"
 else bad "an unrelated upstream change merges with ours"; fi
 
 # 6. a file the overlay edits but upstream removed is reported.

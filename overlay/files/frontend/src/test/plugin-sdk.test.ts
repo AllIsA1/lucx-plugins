@@ -7,8 +7,10 @@ import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vite
 
 import { createBridge, type BridgeContext } from '@/pages/plugins/pluginBridge';
 
+// A copy of the SDK plugins ship (examples/sdk/lucx-ui.js in the plugin system repository, which checks
+// that this copy is current).
 const SDK = readFileSync(
-  fileURLToPath(new URL('../../../examples/sdk/lucx-ui.js', import.meta.url)),
+  fileURLToPath(new URL('./fixtures/lucx-ui-sdk.js', import.meta.url)),
   'utf8',
 );
 

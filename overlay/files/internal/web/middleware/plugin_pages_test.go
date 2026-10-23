@@ -10,9 +10,16 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-
-	"github.com/mhsanaei/3x-ui/v3/internal/lucx/plugins"
 )
+
+// hostPageHeaders are the headers the plugin host puts on a plugin page (its pageCSP policy).
+func hostPageHeaders(h http.Header) {
+	h.Set("Content-Security-Policy", "sandbox allow-scripts; default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; "+
+		"img-src 'self' data:; font-src 'self' data:; connect-src 'none'; form-action 'none'; frame-src 'none'; "+
+		"base-uri 'none'; frame-ancestors 'self'")
+	h.Set("X-Frame-Options", "SAMEORIGIN")
+	h.Set("X-Content-Type-Options", "nosniff")
+}
 
 func pluginPagesRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
@@ -21,7 +28,7 @@ func pluginPagesRouter() *gin.Engine {
 	// The reverse proxy copies upstream headers with Add, so a header the panel already set would double.
 	page := func(c *gin.Context) {
 		upstream := http.Header{}
-		plugins.SetPageHeaders(upstream)
+		hostPageHeaders(upstream)
 		for name, values := range upstream {
 			for _, v := range values {
 				c.Writer.Header().Add(name, v)

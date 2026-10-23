@@ -1422,7 +1422,7 @@ export const sections: readonly Section[] = [
     id: 'plugins',
     title: 'Plugins',
     description:
-      'Install plugins from GitHub links, review the permissions they request, then enable, disable or remove them. Installing is two steps: preview (download, unpack, validate — nothing is installed) and install (the caller must send back exactly the permissions of the previewed manifest). Plugin code is never executed in this release. XUI_PLUGINS_DISABLED=1 turns the whole system off; every call then fails with a message naming the switch. All endpoints live under /panel/api/plugins. LucX-UI only.',
+      'Install plugins from GitHub links, review the permissions they request, then enable, disable or remove them. Installing is two steps: preview (download, unpack, validate — nothing is installed) and install (the caller must send back exactly the permissions of the previewed manifest). The plugin system runs as a service of its own (lucx-plugin-host) and answers these endpoints; the panel only checks the caller and forwards. While the service is not running, or XUI_PLUGINS_DISABLED=1 is set, list and menu report no plugins and every other call fails with a message saying why. All endpoints live under /panel/api/plugins. LucX-UI only.',
     endpoints: [
       {
         method: 'GET',
@@ -1662,26 +1662,6 @@ export const sections: readonly Section[] = [
       },
       {
         method: 'GET',
-        path: '/panel/api/plugins/system',
-        summary:
-          'The plugin system itself (the build of the panel that has plugins, not a plugin): which build is installed, whether a newer one is ready (pending: it is installed at the next start of the panel, at restartAt or on request) and whether a check or update is running now (busy). managed is false, with a reason (not-installed or units-missing), when the plugin system was not put on this host by its installer. Reads the installer state file; no network. Admin session or admin token only: not available to plugin tokens or to a master panel. LucX-UI only.',
-        response:
-          '{\n  "success": true,\n  "obj": {\n    "managed": true,\n    "upstream": "v3.10.2-lucx.307",\n    "release": "v3.10.2-lucx.307-plugins.3",\n    "swappedAt": "2026-10-22T18:04:11Z",\n    "checkedAt": "2026-10-22T19:00:00Z",\n    "pending": false,\n    "busy": false,\n    "restartAt": "04:00"\n  }\n}',
-      },
-      {
-        method: 'POST',
-        path: '/panel/api/plugins/system/check',
-        summary:
-          'Start a check for a newer build of the plugin system (the installer unit lucx-plugins-sync.service). Returns at once; it never restarts the panel. Poll GET /panel/api/plugins/system. Fails when the plugin system is not managed by the installer or a job is already running. Admin only. LucX-UI only.',
-      },
-      {
-        method: 'POST',
-        path: '/panel/api/plugins/system/update',
-        summary:
-          'Check for a newer build and, when one is ready, install it: the installer unit lucx-plugins-apply.service restarts the panel, and the start hook swaps the binary. Returns at once, before the restart; connections to the panel drop for a few seconds. Fails when the plugin system is not managed by the installer or a job is already running. Admin only. LucX-UI only.',
-      },
-      {
-        method: 'GET',
         path: '/panel/api/plugins/x/:id/*path',
         summary:
           'Forward a GET to the plugin process (unix socket), or, for an interface plugin (type ui), serve a file below its ui/ directory (/ui/index.html; a path ending in / serves index.html there; no listing). The panel authenticates the caller, the plugin never sees the cookie, Authorization or CSRF header and receives X-LucX-User, X-LucX-Plugin-Id and X-LucX-Request-Id instead. Every response is sandboxed (pages themselves are opened through the token address of frame-token): Set-Cookie and CORS headers are dropped, Content-Security-Policy is forced to a script-only sandbox without network access and the page may be framed by the panel only. 404 for an unknown plugin, reserved path or missing file, 503 when the plugin is not running or disabled, 502 when it does not answer, 405 for a non-GET on a static page. Plugin API tokens cannot use this route. LucX-UI only.',
@@ -1768,121 +1748,6 @@ export const sections: readonly Section[] = [
             in: 'body (json)',
             type: 'string',
             desc: 'Base URL such as https://mirror.example/gh; archives are fetched from <base>/<owner>/<repo>/tar.gz/<ref>.',
-          },
-        ],
-      },
-      {
-        method: 'GET',
-        path: '/panel/api/plugins/nodes',
-        summary:
-          'What this master knows about the plugins on each enabled node, refreshed every 30 seconds. state is ok (plugins holds the node report), pending (not read yet), offline, unsupported (the node does not announce plugin support) or error (error says why). Master panel only; a node cannot call it for other nodes. LucX-UI only.',
-        response:
-          '{\n  "success": true,\n  "obj": [\n    {\n      "nodeId": 3,\n      "nodeName": "de-fra-1",\n      "state": "ok",\n      "fetchedAt": 1760789000,\n      "plugins": { "available": true, "allowMasterManagement": true, "plugins": [] }\n    }\n  ]\n}',
-      },
-      {
-        method: 'POST',
-        path: '/panel/api/plugins/nodes/:nodeId/refresh',
-        summary: 'Read one node right now instead of waiting for the next poll. LucX-UI only.',
-        params: [{ name: 'nodeId', in: 'path', type: 'integer', desc: 'Node id.' }],
-      },
-      {
-        method: 'POST',
-        path: '/panel/api/plugins/nodes/:nodeId/install',
-        summary:
-          "Install a plugin that is installed on this panel onto a node, disabled. The commit, manifest hash and URL come from this panel's own record, never from the request; the permissions must equal those granted here. The node downloads and verifies the commit itself and must have master management allowed. A plugin of scope master cannot be sent. LucX-UI only.",
-        params: [
-          { name: 'nodeId', in: 'path', type: 'integer', desc: 'Node id.' },
-          {
-            name: 'id',
-            in: 'body (json)',
-            type: 'string',
-            desc: 'Id of a plugin installed on this panel.',
-          },
-          {
-            name: 'permissions',
-            in: 'body (json)',
-            type: 'string[]',
-            desc: 'Exactly the permissions granted to the plugin on this panel.',
-          },
-        ],
-        errorResponse:
-          '{\n  "success": false,\n  "msg": "plugins: node install failed (plugin management by the master is disabled on this node; turn it on in this node\'s Plugins page)"\n}',
-      },
-      {
-        method: 'POST',
-        path: '/panel/api/plugins/nodes/:nodeId/update/:id',
-        summary:
-          "Move a plugin the master installed on a node to this panel's commit: the old one is removed (its data stays), the pinned commit from this panel's own record is installed and, if the plugin was on, turned on again. Refused before the node is touched when the permissions differ from this panel's, the plugin is not installed on the node, was installed there by hand, or already runs this commit. There is no automatic way back: a failure says whether the old version was removed and the new one not installed, or the new one is installed but off. The node must have allowed management by the master. LucX-UI only.",
-        params: [
-          { name: 'nodeId', in: 'path', type: 'integer', desc: 'Node id.' },
-          { name: 'id', in: 'path', type: 'string', desc: 'Plugin id.' },
-          {
-            name: 'permissions',
-            in: 'body (json)',
-            type: 'string[]',
-            desc: 'Exactly the permissions granted to the plugin on this panel.',
-          },
-        ],
-      },
-      {
-        method: 'POST',
-        path: '/panel/api/plugins/nodes/:nodeId/enable/:id',
-        summary: 'Enable a plugin the master installed on a node. LucX-UI only.',
-        params: [
-          { name: 'nodeId', in: 'path', type: 'integer', desc: 'Node id.' },
-          { name: 'id', in: 'path', type: 'string', desc: 'Plugin id.' },
-        ],
-      },
-      {
-        method: 'POST',
-        path: '/panel/api/plugins/nodes/:nodeId/disable/:id',
-        summary: 'Disable a plugin the master installed on a node. LucX-UI only.',
-        params: [
-          { name: 'nodeId', in: 'path', type: 'integer', desc: 'Node id.' },
-          { name: 'id', in: 'path', type: 'string', desc: 'Plugin id.' },
-        ],
-      },
-      {
-        method: 'POST',
-        path: '/panel/api/plugins/nodes/:nodeId/restart/:id',
-        summary: 'Restart the process of a plugin the master installed on a node. LucX-UI only.',
-        params: [
-          { name: 'nodeId', in: 'path', type: 'integer', desc: 'Node id.' },
-          { name: 'id', in: 'path', type: 'string', desc: 'Plugin id.' },
-        ],
-      },
-      {
-        method: 'POST',
-        path: '/panel/api/plugins/nodes/:nodeId/uninstall/:id',
-        summary:
-          'Remove a plugin the master installed from a node, optionally with its data. LucX-UI only.',
-        params: [
-          { name: 'nodeId', in: 'path', type: 'integer', desc: 'Node id.' },
-          { name: 'id', in: 'path', type: 'string', desc: 'Plugin id.' },
-          {
-            name: 'removeData',
-            in: 'body (json)',
-            type: 'boolean',
-            optional: true,
-            defaultValue: false,
-            desc: 'Also delete the plugin data directory on the node.',
-          },
-        ],
-      },
-      {
-        method: 'GET',
-        path: '/panel/api/plugins/nodes/:nodeId/logs/:id',
-        summary: "The last lines a node's plugin process wrote. LucX-UI only.",
-        params: [
-          { name: 'nodeId', in: 'path', type: 'integer', desc: 'Node id.' },
-          { name: 'id', in: 'path', type: 'string', desc: 'Plugin id.' },
-          {
-            name: 'lines',
-            in: 'query',
-            type: 'integer',
-            optional: true,
-            defaultValue: 200,
-            desc: 'How many lines.',
           },
         ],
       },

@@ -6,21 +6,21 @@ package service
 import (
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
 	"github.com/mhsanaei/3x-ui/v3/internal/eventbus"
-	"github.com/mhsanaei/3x-ui/v3/internal/lucx/plugins"
+	"github.com/mhsanaei/3x-ui/v3/internal/lucx/hostlink"
 	"github.com/mhsanaei/3x-ui/v3/internal/xray"
 )
 
 // emitPluginEvent publishes a domain event, but only when some enabled plugin
-// subscribed to it: everything else would just fill the bus.
+// (reported by the plugin host) subscribed to it: everything else would just fill the bus.
 func emitPluginEvent(t eventbus.EventType, source string, data any) {
-	if eventBus == nil || !plugins.Wanted(string(t)) {
+	if eventBus == nil || !hostlink.Wanted(string(t)) {
 		return
 	}
 	eventBus.Publish(eventbus.Event{Type: t, Source: source, Data: data})
 }
 
 func pluginWants(t eventbus.EventType) bool {
-	return eventBus != nil && plugins.Wanted(string(t))
+	return eventBus != nil && hostlink.Wanted(string(t))
 }
 
 // Create adds a client and tells plugins about it.

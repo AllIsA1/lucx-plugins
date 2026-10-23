@@ -5,9 +5,8 @@ import (
 	"strings"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
-	"github.com/mhsanaei/3x-ui/v3/internal/lucx/plugins" // LUCX-HOOK: plugin tokens
+	"github.com/mhsanaei/3x-ui/v3/internal/lucx/hostlink" // LUCX-HOOK: plugin host link
 	"github.com/mhsanaei/3x-ui/v3/internal/web/middleware"
-	"github.com/mhsanaei/3x-ui/v3/internal/web/service"
 	"github.com/mhsanaei/3x-ui/v3/internal/web/service/panel"
 	"github.com/mhsanaei/3x-ui/v3/internal/web/service/tgbot"
 	"github.com/mhsanaei/3x-ui/v3/internal/web/session"
@@ -40,6 +39,18 @@ func NewAPIController(g *gin.RouterGroup) *APIController {
 }
 
 func (a *APIController) checkAPIAuth(c *gin.Context) {
+	// LUCX-HOOK: a call that came through the plugin host's socket is decided there, against the
+	// routes the host named for that plugin; it has no session or token of its own.
+	if hostlink.FromHost(c) {
+		if hostlink.AuthorizeHostCall(c, func() *model.User {
+			u, _ := a.userService.GetFirstUser()
+			return u
+		}) {
+			c.Next()
+		}
+		return
+	}
+	// END LUCX-HOOK
 	// A verified client certificate (a completed mTLS handshake) authenticates
 	// the caller, equivalent to a valid bearer token. api_authed must be set so
 	// the CSRF middleware lets cert-authed mutations through.
@@ -55,23 +66,6 @@ func (a *APIController) checkAPIAuth(c *gin.Context) {
 	auth := c.GetHeader("Authorization")
 	if after, ok := strings.CutPrefix(auth, "Bearer "); ok {
 		tok := after
-		// LUCX-HOOK: plugin tokens are stateless HMACs, never looked up in the database.
-		if strings.HasPrefix(tok, plugins.TokenPrefix) {
-			if e, ok := plugins.AuthenticateToken(tok); ok {
-				if u, err := a.userService.GetFirstUser(); err == nil {
-					session.SetAPIAuthUser(c, u)
-				}
-				c.Set("api_authed", true)
-				c.Set("api_token_scope", plugins.TokenScope)
-				c.Set("plugin_id", e.ID)
-				c.Set("plugin_permissions", e.Permissions)
-				c.Next()
-				return
-			}
-			c.AbortWithStatus(http.StatusUnauthorized)
-			return
-		}
-		// END LUCX-HOOK
 		if row, ok := a.apiTokenService.MatchToken(tok); ok {
 			if u, err := a.userService.GetFirstUser(); err == nil {
 				session.SetAPIAuthUser(c, u)
@@ -166,21 +160,13 @@ func (a *APIController) enforceTokenScope(c *gin.Context) {
 	}
 	rel := relAPIPath(c.FullPath())
 	switch scope {
-	// LUCX-HOOK: a plugin reaches only the routes its permissions name.
-	case plugins.TokenScope:
-		perms, _ := c.Get("plugin_permissions")
-		if list, ok := perms.([]string); ok && plugins.AllowAPI(list, c.Request.Method, rel) {
-			c.Next()
-			return
-		}
-	// END LUCX-HOOK
 	case model.ApiScopeMonitor:
 		if _, allowed := monitorScopeAllow[rel]; allowed && (c.Request.Method == http.MethodGet || c.Request.Method == http.MethodHead) {
 			c.Next()
 			return
 		}
 	case model.ApiScopeNodeSync:
-		// LUCX-HOOK: the plugin routes enforce their own allowlist and opt-in (PluginsController.masterGate).
+		// LUCX-HOOK: the plugin routes enforce their own allowlist and opt-in (the plugin host's masterGate).
 		if strings.HasPrefix(rel, "/plugins/") {
 			c.Next()
 			return
@@ -211,7 +197,7 @@ func relAPIPath(fullPath string) string {
 // initRouter sets up the API routes for inbounds, server, and other endpoints.
 func (a *APIController) initRouter(g *gin.RouterGroup) {
 	// LUCX-HOOK: plugin pages for the sandboxed iframe, which has no cookie (token in the URL)
-	_ = NewPluginFrameController(g, service.NewPluginService())
+	hostlink.RegisterFrame(g)
 	// END LUCX-HOOK
 	// Main API group
 	api := g.Group("/panel/api")
@@ -242,8 +228,8 @@ func (a *APIController) initRouter(g *gin.RouterGroup) {
 	// Masters call GET /panel/api/lucx/hello on remotes to learn nodeType/features.
 	_ = NewLucxController(api.Group("/lucx"))
 	// END LUCX-HOOK
-	// LUCX-HOOK: plugin system — install/enable/uninstall API under /panel/api/plugins/*.
-	_ = NewPluginsController(api.Group("/plugins"), service.NewPluginService())
+	// LUCX-HOOK: plugin system — /panel/api/plugins/* is answered by the plugin host.
+	hostlink.RegisterAdmin(api.Group("/plugins"))
 	// END LUCX-HOOK
 
 	clients := api.Group("/clients")

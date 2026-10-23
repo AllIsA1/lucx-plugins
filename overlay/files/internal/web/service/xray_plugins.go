@@ -9,26 +9,21 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/logger"
-	"github.com/mhsanaei/3x-ui/v3/internal/lucx/plugins"
+	"github.com/mhsanaei/3x-ui/v3/internal/lucx/hostlink"
 	"github.com/mhsanaei/3x-ui/v3/internal/xray"
 )
 
-const xrayPipelineBudget = 10 * time.Second
-
 // applyXrayPipeline lets plugins holding pipeline:xray.config patch the
-// generated Xray configuration. Without such a plugin it costs one lookup.
+// generated Xray configuration, through the plugin host. Without such a plugin
+// (or without a host) it costs one lookup and the config is untouched.
 func applyXrayPipeline(cfg *xray.Config) *xray.Config {
-	if !plugins.HasPipeline(plugins.PipelineXrayConfig) {
+	if !hostlink.HasPipeline(hostlink.PipelineXrayConfig) {
 		return cfg
 	}
-	return patchXrayConfig(cfg, func(doc []byte, validate func(before, after []byte) error) []byte {
-		ctx, cancel := context.WithTimeout(context.Background(), xrayPipelineBudget)
-		defer cancel()
-		out, _ := plugins.TransformPipeline(ctx, plugins.PipelineXrayConfig, doc, validate)
-		return out
+	return patchXrayConfig(cfg, func(doc []byte, _ func(before, after []byte) error) []byte {
+		return hostlink.Transform(context.Background(), hostlink.PipelineXrayConfig, doc)
 	})
 }
 

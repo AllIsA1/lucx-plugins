@@ -5,6 +5,8 @@ package service
 
 import (
 	"encoding/json"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
@@ -14,7 +16,7 @@ import (
 	"github.com/mhsanaei/3x-ui/v3/internal/database"
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
 	"github.com/mhsanaei/3x-ui/v3/internal/eventbus"
-	"github.com/mhsanaei/3x-ui/v3/internal/lucx/plugins"
+	"github.com/mhsanaei/3x-ui/v3/internal/lucx/hostlink"
 	"github.com/mhsanaei/3x-ui/v3/internal/xray"
 
 	"gorm.io/gorm"
@@ -58,34 +60,42 @@ func (l *eventLog) wait(t *testing.T, n int) []eventbus.Event {
 	return nil
 }
 
-// busWithSubscriber starts the plugin manager with one enabled plugin that
-// subscribed to events, and returns what the panel bus carried.
+// busWithSubscriber connects the panel to a plugin host whose one plugin subscribed to events, and
+// returns what the panel bus carried.
 func busWithSubscriber(t *testing.T, events ...string) *eventLog {
 	t.Helper()
-	root := t.TempDir()
-	cfg := plugins.Config{
-		CodeDir:      filepath.Join(root, "plugins"),
-		DataDir:      filepath.Join(root, "data"),
-		RegistryPath: filepath.Join(root, "plugins.json"),
-		Runner:       plugins.NewUnavailableRunner("tests"),
-	}
-	perms := []string{"api:clients:read"}
-	for _, e := range events {
-		perms = append(perms, "events:"+e)
-	}
-	raw, err := json.Marshal(map[string]any{"schema": 1, "plugins": []plugins.Entry{{
-		ID: "watcher", Name: "Watcher", Version: "1.0.0", Type: plugins.TypeProcess, Scope: plugins.ScopeMaster,
-		Commit: "0123456789abcdef0123456789abcdef01234567", Enabled: true, Permissions: perms,
-	}}})
+	dir, err := os.MkdirTemp("", "ev")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(cfg.RegistryPath, raw, 0o600); err != nil {
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	sock := filepath.Join(dir, "host.sock")
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("XUI_PLUGINS_DISABLED", "")
-	plugins.Start(cfg)
-	t.Cleanup(plugins.Stop)
+	host := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/internal/hello":
+			_ = json.NewEncoder(w).Encode(map[string]any{"integrationApi": hostlink.IntegrationAPI, "host": "test"})
+		case "/internal/subscriptions":
+			_ = json.NewEncoder(w).Encode(map[string]any{"events": events, "pipelines": []string{}})
+		default:
+			w.WriteHeader(http.StatusAccepted)
+		}
+	})}
+	go func() { _ = host.Serve(ln) }()
+	link := hostlink.New(hostlink.Config{HostSocket: sock, InternalSocket: filepath.Join(dir, "panel.sock")})
+	hostlink.SetShared(link)
+	link.Start()
+	t.Cleanup(func() { link.Stop(); _ = host.Close(); hostlink.SetShared(nil) })
+	deadline := time.Now().Add(3 * time.Second)
+	for len(events) > 0 && !link.Wanted(events[0]) {
+		if time.Now().After(deadline) {
+			t.Fatal("the link never learned the subscriptions")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 
 	bus := eventbus.New(0)
 	log := &eventLog{}

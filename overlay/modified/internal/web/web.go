@@ -22,8 +22,8 @@ import (
 	"github.com/mhsanaei/3x-ui/v3/internal/config"
 	"github.com/mhsanaei/3x-ui/v3/internal/eventbus"
 	"github.com/mhsanaei/3x-ui/v3/internal/logger"
-	"github.com/mhsanaei/3x-ui/v3/internal/lucx/plugins" // LUCX-HOOK: plugin system
-	"github.com/mhsanaei/3x-ui/v3/internal/lucx/tunnel"  // LUCX-HOOK: tunnel sidecars (NaiveProxy)
+	"github.com/mhsanaei/3x-ui/v3/internal/lucx/hostlink" // LUCX-HOOK: plugin host link
+	"github.com/mhsanaei/3x-ui/v3/internal/lucx/tunnel"   // LUCX-HOOK: tunnel sidecars (NaiveProxy)
 	"github.com/mhsanaei/3x-ui/v3/internal/mtproto"
 	"github.com/mhsanaei/3x-ui/v3/internal/tuic"
 	"github.com/mhsanaei/3x-ui/v3/internal/util/common"
@@ -310,7 +310,6 @@ const (
 	cadenceMtproto       = "@every 10s"
 	cadenceAwg           = "@every 10s" // LUCX-HOOK: AWG sidecar reconcile + traffic
 	cadenceTunnel        = "@every 10s" // LUCX-HOOK: tunnel sidecars reconcile + Naive traffic/online
-	cadenceNodePlugins   = "@every 30s" // LUCX-HOOK: plugin state of the nodes
 	cadenceAmneziaWG     = "@every 10s"
 	cadenceTuic          = "@every 10s"
 	cadenceClientIPScan  = "@every 10s"
@@ -362,9 +361,6 @@ func (s *Server) startTask(restartXray bool, loc *time.Location) {
 	tunnelJob := job.NewTunnelJob()
 	_, _ = s.cron.AddJob(cadenceTunnel, tunnelJob)
 	go tunnelJob.Run()
-	// END LUCX-HOOK
-	// LUCX-HOOK: what the nodes run as plugins, read every 30 s
-	_, _ = s.cron.AddJob(cadenceNodePlugins, job.NewNodePluginsJob())
 	// END LUCX-HOOK
 
 	// Reconcile embedded AmneziaWG interfaces; traffic rides Xray's own stats
@@ -593,9 +589,8 @@ func (s *Server) start(restartXray bool, startTgBot bool) (err error) {
 		return tls.X509KeyPair(ck.CertPEM, ck.KeyPEM)
 	})
 
-	// LUCX-HOOK: plugin manager; never fails startup, XUI_PLUGINS_DISABLED=1 skips it.
-	plugins.SetPanelURL(func() string { return (&service.PluginService{}).PanelURL(&s.settingService) })
-	plugins.Start(plugins.DefaultConfig())
+	// LUCX-HOOK: link to the plugin host; never fails startup, XUI_PLUGINS_DISABLED=1 skips it.
+	hostlink.Start()
 	// END LUCX-HOOK
 
 	engine, err := s.initRouter()
@@ -680,7 +675,7 @@ func (s *Server) start(restartXray bool, startTgBot bool) (err error) {
 	job.EventBus = s.bus
 	tgbot.EventBus = s.bus
 	// LUCX-HOOK: panel events reach plugins that subscribed (never blocks the bus).
-	s.bus.Subscribe("plugins", plugins.HandleEvent)
+	s.bus.Subscribe("plugins", hostlink.HandleEvent)
 	// END LUCX-HOOK
 
 	// Wire xray crash callback BEFORE startTask so it's ready
@@ -826,8 +821,8 @@ func (s *Server) stop(stopXray bool, stopTgBot bool) error {
 		tunnel.GetManager().StopAll()
 		// END LUCX-HOOK
 	}
-	// LUCX-HOOK: plugin manager
-	plugins.Stop()
+	// LUCX-HOOK: plugin host link
+	hostlink.Stop()
 	// END LUCX-HOOK
 	if stopXray {
 		if err := s.xrayService.StopXray(); err != nil {
