@@ -333,6 +333,34 @@ func (u *Updater) Apply(ctx context.Context) error {
 	return nil
 }
 
+// InstallFresh puts the release the signed list names where no host is installed yet (the installer's
+// first step). It never replaces an existing binary: that is what Apply is for, with a way back.
+func (u *Updater) InstallFresh(ctx context.Context) error {
+	if err := u.begin(); err != nil {
+		return err
+	}
+	defer u.end()
+	if _, err := os.Stat(u.cfg.Exe); err == nil {
+		return fmt.Errorf("%s already exists; updates go through the update button", u.cfg.Exe)
+	}
+	doc, err := u.document(ctx)
+	if err != nil {
+		return err
+	}
+	bin, ok := doc.Binary(u.cfg.Arch)
+	if !ok {
+		return fmt.Errorf("no build for %s", u.cfg.Arch)
+	}
+	if err := u.install(ctx, doc.Version, bin); err != nil {
+		return err
+	}
+	u.mu.Lock()
+	u.st.CheckedAt = u.now()
+	u.save()
+	u.mu.Unlock()
+	return nil
+}
+
 func (u *Updater) install(ctx context.Context, version string, bin builds.HostBinary) error {
 	url := bin.URL
 	if u.cfg.Rewrite != nil {
@@ -353,8 +381,10 @@ func (u *Updater) install(ctx context.Context, version string, bin builds.HostBi
 	if err := probe(ctx, tmp.Name(), version); err != nil {
 		return err
 	}
-	if err := copyFile(u.cfg.Exe, u.cfg.Exe+".prev"); err != nil {
-		return fmt.Errorf("cannot keep the previous binary: %w", err)
+	if _, err := os.Stat(u.cfg.Exe); err == nil {
+		if err := copyFile(u.cfg.Exe, u.cfg.Exe+".prev"); err != nil {
+			return fmt.Errorf("cannot keep the previous binary: %w", err)
+		}
 	}
 	return os.Rename(tmp.Name(), u.cfg.Exe)
 }

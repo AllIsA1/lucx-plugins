@@ -7,7 +7,6 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
 fails=0
 ok() { echo "PASS $1"; }
 bad() { echo "FAIL $1${2:+ — $2}"; fails=$((fails + 1)); }
@@ -17,6 +16,39 @@ dist=$work/dist
 mkdir -p "$dist"
 CGO_ENABLED=0 go build -trimpath -ldflags "-X main.version=test" -o "$dist/lucx-plugins-sync-linux-$arch" ./cmd/lucx-plugins-sync
 (cd "$dist" && sha256sum "lucx-plugins-sync-linux-$arch" | cut -d' ' -f1 > "lucx-plugins-sync-linux-$arch.sha256")
+
+# The signed list and the host binary the installer takes the plugin system service from, served locally.
+ctl=$work/buildsctl
+go build -o "$ctl" ./cmd/buildsctl
+key=$work/key
+pub=$("$ctl" keygen -out "$key")
+srv=$work/srv
+mkdir -p "$srv/list" "$srv/dl/host-1"
+printf '#!/bin/sh\necho host-1\n' > "$srv/dl/host-1/lucx-plugin-host-linux-$arch"
+chmod 755 "$srv/dl/host-1/lucx-plugin-host-linux-$arch"
+echo "another architecture" > "$srv/dl/host-1/lucx-plugin-host-linux-other"
+mine=$(sha256sum "$srv/dl/host-1/lucx-plugin-host-linux-$arch" | cut -d' ' -f1)
+theirs=$(sha256sum "$srv/dl/host-1/lucx-plugin-host-linux-other" | cut -d' ' -f1)
+if [[ $arch == amd64 ]]; then amd=$mine; arm=$theirs; else amd=$theirs; arm=$mine; fi
+"$ctl" host-set -index "$srv/list/host.json" -version host-1 -amd64-sha256 "$amd" -arm64-sha256 "$arm"
+"$ctl" host-sign -key "$key" -index "$srv/list/host.json"
+cat > "$work/serve.py" << 'PY'
+import http.server, sys, os
+os.chdir(sys.argv[1])
+class H(http.server.SimpleHTTPRequestHandler):
+    def log_message(self, *a): pass
+s = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
+print(s.server_address[1], flush=True)
+s.serve_forever()
+PY
+python3 "$work/serve.py" "$srv" > "$work/serve.port" &
+serve_pid=$!
+trap 'kill $serve_pid 2> /dev/null || true; rm -rf "$work"' EXIT
+for _ in $(seq 1 50); do [[ -s $work/serve.port ]] && break; sleep 0.1; done
+port=$(cat "$work/serve.port")
+export LUCX_HOST_UPDATE_BASE=http://127.0.0.1:$port/list
+export LUCX_HOST_UPDATE_DOWNLOAD_BASE=http://127.0.0.1:$port/dl
+export LUCX_HOST_UPDATE_PUBKEYS=$pub
 
 new_root() {
   local r=$1
@@ -61,14 +93,44 @@ grep -q "INDEX_URL=http://127.0.0.1:1/builds.json" "$r/etc/lucx-plugins/config" 
 [[ $(cat "$r/usr/local/x-ui/x-ui") == $'#!/bin/sh\necho mine' ]] && ok "an unknown panel binary is left alone" || bad "an unknown panel binary is left alone"
 grep -q "restart x-ui" "$r/systemctl.log" && bad "--no-restart must not restart the panel" || ok "--no-restart does not restart the panel"
 
+# 1b. the plugin system service: binary, unit, environment file, start
+[[ -x $r/usr/local/lucx-plugins/lucx-plugin-host && $("$r/usr/local/lucx-plugins/lucx-plugin-host" -v) == host-1 ]] && ok "the service binary comes from the signed list" || bad "the service binary comes from the signed list"
+unit=$r/etc/systemd/system/lucx-plugins-host.service
+[[ -f $unit ]] && ok "the service unit is written" || bad "the service unit is written"
+grep -q "^Restart=always$" "$unit" && grep -q "^KillMode=process$" "$unit" && ok "the unit restarts the service and leaves plugin processes alone" || bad "the unit restarts the service and leaves plugin processes alone"
+grep -q "^ExecStartPre=-+$r/usr/local/lucx-plugins/lucx-plugins-sync -host-exe $r/usr/local/lucx-plugins/lucx-plugin-host -host-state $r/var/lib/lucx-plugin-host host-guard$" "$unit" && ok "a failing update is rolled back by a guard before each start" || bad "a failing update is rolled back by a guard before each start"
+grep -q "^ExecStart=$r/usr/local/lucx-plugins/lucx-plugin-host -state-dir $r/var/lib/lucx-plugin-host$" "$unit" && grep -q "^ReadWritePaths=.*$r/usr/local/lucx-plugins.*/var/lib/x-ui-plugins" "$unit" && ok "the unit names the paths it writes" || bad "the unit names the paths it writes"
+grep -q "^RuntimeDirectory=lucx-panel$" "$r/etc/systemd/system/x-ui.service.d/30-lucx-plugins.conf" && ok "the panel gets a runtime directory for its socket" || bad "the panel gets a runtime directory for its socket"
+grep -q "enable lucx-plugins-host.service" "$r/systemctl.log" && grep -q "restart lucx-plugins-host.service" "$r/systemctl.log" && ok "the service is enabled and (re)started" || bad "the service is enabled and (re)started"
+host_unit_name=$(bash -c 'source installer/common.sh; echo "$HOST_UNIT_NAME"')
+# shellcheck disable=SC2053 # a glob on purpose: the service treats every lucx-plugin-*.service as a plugin's
+[[ $host_unit_name != lucx-plugin-*.service ]] && ok "the service's own unit is not mistaken for a plugin's" || bad "the service's own unit is not mistaken for a plugin's" "$host_unit_name"
+grep -q "^#LUCX_HOST_GATEWAY=127.0.0.1:19480$" "$r/etc/lucx-plugins/host.env" && ok "the gateway defaults are documented in the environment file" || bad "the gateway defaults are documented in the environment file"
+if command -v systemd-analyze > /dev/null 2>&1; then
+  if systemd-analyze verify "$unit" > "$work/verify.out" 2>&1; then ok "systemd accepts the service unit"; else bad "systemd accepts the service unit" "$(head -5 "$work/verify.out")"; fi
+fi
+
 # 2. installing again changes nothing
 before=$(cd "$r" && find etc usr/local/lucx-plugins -type f -print0 | sort -z | xargs -0 sha256sum)
 install_in "$r" --no-restart --restart-at 05:30 > /dev/null 2>&1
 after=$(cd "$r" && find etc usr/local/lucx-plugins -type f -print0 | sort -z | xargs -0 sha256sum)
 [[ $before == "$after" ]] && ok "a second install is idempotent" || bad "a second install is idempotent"
 
+# 2b. a gateway of the operator's choice is written, and only a loopback one
+install_in "$r" --no-restart --gateway 127.0.0.1:19999 > /dev/null 2>&1
+grep -q "^LUCX_HOST_GATEWAY=127.0.0.1:19999$" "$r/etc/lucx-plugins/host.env" && ok "--gateway is written to the environment file" || bad "--gateway is written to the environment file"
+install_in "$r" --no-restart > /dev/null 2>&1
+grep -q "^LUCX_HOST_GATEWAY=127.0.0.1:19999$" "$r/etc/lucx-plugins/host.env" && ok "a later install keeps the operator's gateway" || bad "a later install keeps the operator's gateway"
+for g in 0.0.0.0:19480 example.com:19480 192.168.1.5:19480 127.0.0.1 "127.0.0.1:1;rm"; do
+  if install_in "$r" --no-restart --gateway "$g" > /dev/null 2>&1; then bad "gateway '$g' is refused"; else ok "gateway '$g' is refused"; fi
+done
+
 # 3. uninstall when the panel is not our build: parts removed, nothing restarted, data kept
+mkdir -p "$r/var/lib/lucx-plugin-host" && echo "registry" > "$r/var/lib/lucx-plugin-host/plugins.json"
 uninstall_in "$r" > "$work/u1.out" 2>&1 || bad "uninstall runs" "$(tail -3 "$work/u1.out")"
+grep -q "disable --now lucx-plugins-host.service" "$r/systemctl.log" && grep -q "stop lucx-plugin-\*.service" "$r/systemctl.log" && ok "uninstall stops the service and the plugins it started" || bad "uninstall stops the service and the plugins it started"
+[[ ! -e $r/etc/systemd/system/lucx-plugins-host.service && ! -e $r/etc/lucx-plugins ]] && ok "uninstall removes the service unit and its environment" || bad "uninstall removes the service unit and its environment"
+[[ -f $r/var/lib/lucx-plugin-host/plugins.json ]] && ok "the service's registry stays without --purge" || bad "the service's registry stays without --purge"
 [[ ! -e $r/usr/local/lucx-plugins && ! -e $r/etc/systemd/system/x-ui.service.d/30-lucx-plugins.conf && ! -e $r/etc/systemd/system/lucx-plugins-apply.timer && ! -e $r/etc/lucx-plugins ]] && ok "uninstall removes everything it installed" || bad "uninstall removes everything it installed"
 [[ -f $r/var/lib/x-ui-plugins/data ]] && ok "plugin data stays without --purge" || bad "plugin data stays without --purge"
 grep -q "restart x-ui" "$r/systemctl.log" && bad "nothing was restored, so nothing should restart" || ok "no restart when there was nothing to restore"
@@ -81,6 +143,7 @@ printf '#!/bin/sh\necho "restored the original panel binary"\n' > "$r/usr/local/
 uninstall_in "$r" --purge > /dev/null 2>&1 || bad "uninstall with --purge runs"
 grep -q "restart x-ui" "$r/systemctl.log" && ok "the panel is restarted after a restore" || bad "the panel is restarted after a restore"
 [[ ! -e $r/var/lib/x-ui-plugins ]] && ok "--purge removes plugin data" || bad "--purge removes plugin data"
+[[ ! -e $r/var/lib/lucx-plugin-host ]] && ok "--purge removes the service's state" || bad "--purge removes the service's state"
 
 # 5. a failing restore stops the uninstall before it deletes the program
 r=$work/c
@@ -144,6 +207,22 @@ if (cat "$work/raw/installer/uninstall.sh" | LUCX_ROOT=$r LUCX_SYSTEMCTL=$r/bin/
 else
   bad "uninstall works when piped into bash" "$(tail -4 "$work/g2.out")"
 fi
+
+# 6d. a plugin system service that cannot be installed stops the installer before it changes anything else;
+# a leftover of the earlier built-in system is mentioned
+r=$work/h
+new_root "$r"
+rm -rf "$r/etc/lucx-plugins"
+foreign=$("$ctl" keygen -out "$work/other.key")
+if (export LUCX_HOST_UPDATE_PUBKEYS=$foreign; install_in "$r" --no-restart > "$work/h.out" 2>&1); then bad "an untrusted service list must abort"; else grep -q "could not be installed" "$work/h.out" && ok "an untrusted service list aborts with a clear message" || bad "an untrusted service list aborts with a clear message" "$(tail -3 "$work/h.out")"; fi
+[[ ! -e $r/etc/systemd/system/x-ui.service.d && ! -e $r/etc/systemd/system/lucx-plugins-host.service && ! -e $r/usr/local/lucx-plugins/lucx-plugin-host ]] && ok "nothing but the program is left after an aborted install" || bad "nothing but the program is left after an aborted install"
+r=$work/i
+new_root "$r"
+rm -rf "$r/etc/lucx-plugins"
+echo '{}' > "$r/etc/x-ui/plugins.json"
+install_in "$r" --no-restart > "$work/i.out" 2>&1
+grep -q "earlier, built-in plugin system" "$work/i.out" && ok "plugins of the earlier system are mentioned, not touched" || bad "plugins of the earlier system are mentioned, not touched"
+[[ -f $r/etc/x-ui/plugins.json ]] && ok "the earlier system's files are left alone" || bad "the earlier system's files are left alone"
 
 # 7. refuses to run without a panel binary or with bad options
 r=$work/e

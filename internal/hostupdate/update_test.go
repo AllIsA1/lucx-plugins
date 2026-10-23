@@ -570,3 +570,67 @@ func TestOnceTheGuardCountsTheBinaryDoesNotCountAgain(t *testing.T) {
 		t.Error("the guard did not roll back after its own fourth count")
 	}
 }
+
+func TestInstallFreshPlacesTheCurrentReleaseWhereNothingIsInstalled(t *testing.T) {
+	w := newWorld(t)
+	if err := os.Remove(w.exe); err != nil {
+		t.Fatal(err)
+	}
+	w.publish(next("host-5"))
+	u := w.updater("")
+	if err := u.InstallFresh(context.Background()); err != nil {
+		t.Fatalf("InstallFresh: %v", err)
+	}
+	if w.exeContent() != string(script("host-5")) {
+		t.Errorf("binary = %q", w.exeContent())
+	}
+	if st, err := os.Stat(w.exe); err != nil || st.Mode().Perm() != 0o755 {
+		t.Errorf("mode = %v, %v; want 0755", st.Mode(), err)
+	}
+	if _, err := os.Stat(w.exe + ".prev"); err == nil {
+		t.Error(".prev written although there was nothing before")
+	}
+	if st := u.Status(); st.Pending != "" || st.Error != "" {
+		t.Errorf("status = %+v: a fresh install has nothing to roll back to and nothing to confirm", st)
+	}
+	if left, _ := filepath.Glob(filepath.Join(w.dir, ".lucx-host-*")); len(left) != 0 {
+		t.Errorf("temporary files left: %v", left)
+	}
+}
+
+func TestInstallFreshRefusesWhatApplyRefusesAndNeverOverwrites(t *testing.T) {
+	cases := map[string]func(w *world){
+		"a binary already there": func(w *world) { w.publish(next("host-5")) },
+		"a hash that does not match": func(w *world) {
+			_ = os.Remove(w.exe)
+			w.publish(next("host-5"))
+			w.files["/dl/host-5/lucx-plugin-host-linux-amd64"] = script("host-5-evil")
+		},
+		"a binary that cannot run": func(w *world) {
+			_ = os.Remove(w.exe)
+			w.publish(release{version: "host-5", amd64: []byte("not an executable"), arm64: script("host-5")})
+		},
+		"a list the key did not sign": func(w *world) {
+			_ = os.Remove(w.exe)
+			w.publish(next("host-5"))
+			w.sig = builds.SignHost(func() ed25519.PrivateKey { _, p, _ := ed25519.GenerateKey(rand.Reader); return p }(), w.doc)
+		},
+	}
+	for name, setup := range cases {
+		t.Run(name, func(t *testing.T) {
+			w := newWorld(t)
+			setup(w)
+			before, beforeErr := os.ReadFile(w.exe)
+			if err := w.updater("").InstallFresh(context.Background()); err == nil {
+				t.Fatal("InstallFresh succeeded")
+			}
+			after, afterErr := os.ReadFile(w.exe)
+			if string(before) != string(after) || (beforeErr == nil) != (afterErr == nil) {
+				t.Errorf("the file at the binary's path changed: %q -> %q", before, after)
+			}
+			if left, _ := filepath.Glob(filepath.Join(w.dir, ".lucx-host-*")); len(left) != 0 {
+				t.Errorf("temporary files left: %v", left)
+			}
+		})
+	}
+}

@@ -66,7 +66,7 @@ scripts/build-host.sh host-9 "$work/dist9" > /dev/null 2>&1
 sigbefore=$(sha256sum "$site/host.json.sig")
 if BUILDS_SIGNING_KEY=$(cat "$other") scripts/host-list.sh host-9 "$work/dist9" "$site" > /dev/null 2>&1; then bad "a key nobody trusts is refused"; else ok "a key nobody trusts is refused"; fi
 [[ $before == "$(sha256sum "$site/host.json")" && $sigbefore == "$(sha256sum "$site/host.json.sig")" ]] && ok "a refused signature leaves the site untouched" || bad "a refused signature leaves the site untouched"
-if BUILDS_SIGNING_KEY= scripts/host-list.sh host-9 "$work/dist9" "$site" > /dev/null 2>&1; then bad "a missing key is refused"; else ok "a missing key is refused"; fi
+if BUILDS_SIGNING_KEY="" scripts/host-list.sh host-9 "$work/dist9" "$site" > /dev/null 2>&1; then bad "a missing key is refused"; else ok "a missing key is refused"; fi
 
 ((fails == 0)) || { echo "$fails test(s) failed"; exit 1; }
 echo "all passed"

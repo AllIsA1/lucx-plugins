@@ -6,10 +6,21 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/AllIsA1/lucx-plugins/internal/builds"
 )
 
 func TestParseConfig(t *testing.T) {
@@ -144,5 +155,93 @@ func TestHostGuardRollsBackAHostThatKeepsFailingAndNeverBlocksTheStart(t *testin
 		if _, stderr, code := invoke(t, args...); code != 0 {
 			t.Errorf("host-guard %v = %d %q", args, code, stderr)
 		}
+	}
+}
+
+// signedHostList serves a signed host.json and one binary, the way the published list does.
+func signedHostList(t *testing.T, version string, binary []byte) (base, download, pub string) {
+	t.Helper()
+	pubKey, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := func(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:]) }
+	arch := runtime.GOARCH
+	hashes := map[string]string{"amd64": sum([]byte("other amd64")), "arm64": sum([]byte("other arm64"))}
+	hashes[arch] = sum(binary)
+	doc := &builds.HostIndex{Schema: 1, Sequence: 1}
+	if err := doc.Set(version, hashes); err != nil {
+		t.Fatal(err)
+	}
+	doc.GeneratedAt = time.Now().UTC()
+	raw, _ := builds.MarshalHost(doc)
+	sig := builds.SignHost(priv, raw)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/list/host.json":
+			_, _ = w.Write(raw)
+		case r.URL.Path == "/list/host.json.sig":
+			_, _ = w.Write([]byte(sig))
+		case r.URL.Path == "/dl/"+version+"/lucx-plugin-host-linux-"+arch:
+			_, _ = w.Write(binary)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL + "/list", srv.URL + "/dl", base64.StdEncoding.EncodeToString(pubKey)
+}
+
+func TestHostInstallPutsTheSignedReleaseInPlaceOnceAndLeavesAnExistingOneAlone(t *testing.T) {
+	binary := []byte("#!/bin/sh\necho host-3\n")
+	base, download, pub := signedHostList(t, "host-3", binary)
+	t.Setenv("LUCX_HOST_UPDATE_BASE", base)
+	t.Setenv("LUCX_HOST_UPDATE_DOWNLOAD_BASE", download)
+	t.Setenv("LUCX_HOST_UPDATE_PUBKEYS", pub)
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "bin", "lucx-plugin-host")
+	state := filepath.Join(dir, "state")
+	if err := os.MkdirAll(filepath.Dir(exe), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, code := invoke(t, "-host-exe", exe, "-host-state", state, "host-install")
+	if code != 0 {
+		t.Fatalf("host-install = %d: %s", code, stderr)
+	}
+	if got, _ := os.ReadFile(exe); string(got) != string(binary) {
+		t.Errorf("binary = %q", got)
+	}
+	if !strings.Contains(stdout, "host-3") {
+		t.Errorf("stdout = %q, want the installed release named", stdout)
+	}
+
+	// A second run (the installer run again) must not touch what is there.
+	if err := os.WriteFile(exe, []byte("#!/bin/sh\necho host-9\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	stdout, _, code = invoke(t, "-host-exe", exe, "-host-state", state, "host-install")
+	if code != 0 || !strings.Contains(stdout, "already") {
+		t.Errorf("second host-install = %d %q, want a quiet 'already installed'", code, stdout)
+	}
+	if got, _ := os.ReadFile(exe); !strings.Contains(string(got), "host-9") {
+		t.Errorf("an installed host was replaced: %q", got)
+	}
+}
+
+func TestHostInstallFailsLoudlyAndLeavesNothingWhenTheListCannotBeTrusted(t *testing.T) {
+	base, download, _ := signedHostList(t, "host-3", []byte("#!/bin/sh\necho host-3\n"))
+	otherPub, _, _ := ed25519.GenerateKey(rand.Reader)
+	t.Setenv("LUCX_HOST_UPDATE_BASE", base)
+	t.Setenv("LUCX_HOST_UPDATE_DOWNLOAD_BASE", download)
+	t.Setenv("LUCX_HOST_UPDATE_PUBKEYS", base64.StdEncoding.EncodeToString(otherPub))
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "lucx-plugin-host")
+	_, stderr, code := invoke(t, "-host-exe", exe, "-host-state", filepath.Join(dir, "state"), "host-install")
+	if code == 0 || !strings.Contains(stderr, "refused") {
+		t.Errorf("host-install with a foreign key = %d %q, want a failure that says why", code, stderr)
+	}
+	if _, err := os.Stat(exe); err == nil {
+		t.Error("a binary was installed from a list nobody trusted")
 	}
 }

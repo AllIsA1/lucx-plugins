@@ -16,10 +16,12 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 
 	"github.com/AllIsA1/lucx-plugins/internal/agent"
+	"github.com/AllIsA1/lucx-plugins/internal/builds"
 	"github.com/AllIsA1/lucx-plugins/internal/hostupdate"
 	"github.com/AllIsA1/lucx-plugins/keys"
 )
@@ -32,7 +34,7 @@ var trustedKeys = keys.Builds
 
 const (
 	defaultConfig  = "/etc/lucx-plugins/config"
-	usage          = "usage: lucx-plugins-sync [-config <file>] [-index-url <url>] <at-start|check|apply|restore|status|version>\n       lucx-plugins-sync [-host-exe <file>] [-host-state <dir>] host-guard\n"
+	usage          = "usage: lucx-plugins-sync [-config <file>] [-index-url <url>] <at-start|check|apply|restore|status|version>\n       lucx-plugins-sync [-host-exe <file>] [-host-state <dir>] <host-guard|host-install>\n"
 	defaultPanel   = "/usr/local/x-ui/x-ui"
 	defaultState   = "/var/lib/lucx-plugins"
 	defaultService = "x-ui"
@@ -110,8 +112,11 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, version)
 		return 0
 	}
-	if command == "host-guard" {
+	switch command {
+	case "host-guard":
 		return hostGuard(*hostExe, *hostState, stderr)
+	case "host-install":
+		return hostInstall(ctx, *hostExe, *hostState, stdout, stderr)
 	}
 	if !map[string]bool{"at-start": true, "check": true, "apply": true, "restore": true, "status": true}[command] {
 		fmt.Fprint(stderr, usage)
@@ -181,6 +186,49 @@ func hostGuard(exe, stateDir string, stderr io.Writer) int {
 	case rolledBack:
 		fmt.Fprintln(stderr, "lucx-plugins: the updated plugin host did not start properly and was rolled back to the previous release")
 	}
+	return 0
+}
+
+// hostInstall puts the plugin host, the release the signed host.json names, where none is installed. The
+// installer runs it. LUCX_HOST_UPDATE_BASE, LUCX_HOST_UPDATE_DOWNLOAD_BASE and LUCX_HOST_UPDATE_PUBKEYS
+// (the same variables the host reads) point it at a mirror and a key of your own for development.
+func hostInstall(ctx context.Context, exe, stateDir string, stdout, stderr io.Writer) int {
+	if st, err := os.Stat(exe); err == nil && !st.IsDir() {
+		fmt.Fprintf(stdout, "the plugin host is already installed (%s); updates go through the Plugins page\n", exe)
+		return 0
+	}
+	keyList := trustedKeys()
+	if env := os.Getenv("LUCX_HOST_UPDATE_PUBKEYS"); env != "" {
+		parsed, err := builds.ParseKeys(strings.Split(env, ","))
+		if err != nil {
+			fmt.Fprintf(stderr, "lucx-plugins: LUCX_HOST_UPDATE_PUBKEYS: %v\n", err)
+			return 2
+		}
+		keyList = parsed
+	}
+	cfg := hostupdate.Config{
+		Exe: exe, StateDir: stateDir, Arch: runtime.GOARCH, Managed: true,
+		BaseURL: os.Getenv("LUCX_HOST_UPDATE_BASE"), Keys: keyList,
+		Log: func(format string, v ...any) { fmt.Fprintf(stderr, "lucx-plugins: "+format+"\n", v...) },
+	}
+	if base := os.Getenv("LUCX_HOST_UPDATE_DOWNLOAD_BASE"); base != "" {
+		prefix := "https://github.com/" + builds.OwnRepo + "/releases/download/"
+		cfg.Rewrite = func(u string) string { return strings.Replace(u, prefix, strings.TrimSuffix(base, "/")+"/", 1) }
+	}
+	if err := os.MkdirAll(filepath.Dir(exe), 0o755); err != nil {
+		fmt.Fprintf(stderr, "lucx-plugins: %v\n", err)
+		return 1
+	}
+	if err := hostupdate.New(cfg).InstallFresh(ctx); err != nil {
+		fmt.Fprintf(stderr, "lucx-plugins: cannot install the plugin host: %v\n", err)
+		return 1
+	}
+	out, err := exec.CommandContext(ctx, exe, "-v").Output()
+	if err != nil {
+		fmt.Fprintf(stderr, "lucx-plugins: the installed plugin host does not run: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "installed the plugin host %s at %s\n", strings.TrimSpace(string(out)), exe)
 	return 0
 }
 

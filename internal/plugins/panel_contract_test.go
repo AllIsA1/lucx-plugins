@@ -103,3 +103,19 @@ func TestPanelRelayOffersExactlyTheMasterRoutesOfANode(t *testing.T) {
 		t.Errorf("the node accepts from a master:\n%s\nthe panel relay's golden file lists:\n%s", strings.Join(got, "\n"), want)
 	}
 }
+
+// The service's own systemd unit must never look like a plugin's: the supervisor stops every listed
+// lucx-plugin-<id>.service whose id is not in its registry, and would stop the service itself.
+func TestTheServicesOwnUnitIsNotAPluginUnit(t *testing.T) {
+	raw := readOverlay(t, "../../installer/common.sh")
+	m := regexp.MustCompile(`(?m)^HOST_UNIT_NAME=(\S+)$`).FindStringSubmatch(raw)
+	if m == nil {
+		t.Fatal("installer/common.sh no longer defines HOST_UNIT_NAME")
+	}
+	if id, ok := idFromUnit(m[1]); ok {
+		t.Errorf("the service's unit %s would be treated as the unit of plugin %q and stopped by the supervisor", m[1], id)
+	}
+	if _, ok := idFromUnit("lucx-plugin-hello.service"); !ok {
+		t.Error("the check no longer recognises a real plugin unit, so it proves nothing")
+	}
+}

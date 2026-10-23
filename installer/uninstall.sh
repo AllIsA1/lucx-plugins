@@ -27,6 +27,9 @@ need_root
 [[ -x $SYNC ]] || die "the plugin system is not installed here ($SYNC is missing)"
 
 "$SYSTEMCTL" disable --now lucx-plugins-sync.timer lucx-plugins-apply.timer > /dev/null 2>&1 || true
+# The service first, so it cannot start plugins again; then the plugins it started (units of their own).
+"$SYSTEMCTL" disable --now "$HOST_UNIT_NAME" > /dev/null 2>&1 || true
+"$SYSTEMCTL" stop 'lucx-plugin-*.service' > /dev/null 2>&1 || true
 # The drop-in goes first: otherwise the next start of the panel would swap the build straight back in.
 rm -f "$DROPIN_DIR/30-lucx-plugins.conf"
 rmdir "$DROPIN_DIR" 2> /dev/null || true
@@ -37,13 +40,13 @@ out=$("$SYNC" -config "$CONF" restore) || die "could not restore the original pa
 echo "$out"
 [[ $out == restored* ]] && restored=1
 
-rm -f "$UNIT_DIR"/lucx-plugins-sync.service "$UNIT_DIR"/lucx-plugins-sync.timer \
+rm -f "$HOST_UNIT" "$UNIT_DIR"/lucx-plugins-sync.service "$UNIT_DIR"/lucx-plugins-sync.timer \
   "$UNIT_DIR"/lucx-plugins-apply.service "$UNIT_DIR"/lucx-plugins-apply.timer
 "$SYSTEMCTL" daemon-reload
 rm -rf "$BIN_DIR" "$CONF_DIR" "$STATE_DIR"
 
 if ((PURGE)); then
-  rm -rf "$ROOT/var/lib/x-ui-plugins" "$ROOT/etc/x-ui/plugins" "$ROOT/etc/x-ui/plugins-data" "$ROOT/etc/x-ui/plugins.json" "$ROOT/etc/x-ui/plugins.key" "$ROOT/etc/x-ui/plugins-catalog.json"
+  rm -rf "$HOST_STATE" "$ROOT/var/lib/x-ui-plugins" "$ROOT/etc/x-ui/plugins" "$ROOT/etc/x-ui/plugins-data" "$ROOT/etc/x-ui/plugins.json" "$ROOT/etc/x-ui/plugins.key" "$ROOT/etc/x-ui/plugins-catalog.json"
   say "Plugins and their data were removed."
 fi
 

@@ -20,6 +20,15 @@ UNIT_DIR=$ROOT/etc/systemd/system
 DROPIN_DIR=$UNIT_DIR/$SERVICE.service.d
 SYSTEMCTL=${LUCX_SYSTEMCTL:-systemctl}
 
+# The plugin system service. Its unit must not be called lucx-plugin-<something>.service: the service
+# treats every unit of that pattern as a plugin's and would stop the one it does not know, itself included.
+HOST_UNIT_NAME=lucx-plugins-host.service
+HOST_EXE=$BIN_DIR/lucx-plugin-host
+HOST_STATE=$ROOT/var/lib/lucx-plugin-host
+HOST_ENV=$CONF_DIR/host.env
+HOST_UNIT=$UNIT_DIR/$HOST_UNIT_NAME
+GATEWAY=
+
 red=$'\033[0;31m'
 green=$'\033[0;32m'
 yellow=$'\033[0;33m'
@@ -47,12 +56,14 @@ parse_args() {
       --restart-at) RESTART_AT=${2:?--restart-at needs HH:MM}; shift 2 ;;
       --no-restart) NO_RESTART=1; shift ;;
       --purge) PURGE=1; shift ;;
+      --gateway) GATEWAY=${2:?--gateway needs a loopback address like 127.0.0.1:19480}; shift 2 ;;
       -h | --help) usage; exit 0 ;;
       *) die "unknown option $1 (try --help)" ;;
     esac
   done
   [[ $RESTART_AT =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]] || die "--restart-at must look like 04:00"
   [[ $SERVICE =~ ^[A-Za-z0-9_.@-]+$ ]] || die "--service must be a plain unit name"
+  [[ -z $GATEWAY || $GATEWAY =~ ^(127(\.[0-9]{1,3}){3}|localhost|\[::1\]):[0-9]{1,5}$ ]] || die "--gateway must be a loopback address with a port, like 127.0.0.1:19480"
   DROPIN_DIR=$UNIT_DIR/$SERVICE.service.d
 }
 
