@@ -454,3 +454,119 @@ func TestUnmanagedHostsOfferNothing(t *testing.T) {
 		t.Error("an unmanaged host went to the network")
 	}
 }
+
+// install puts host-2 in place as an update would and returns the world ready for guard runs.
+func installed(t *testing.T) *world {
+	t.Helper()
+	w := newWorld(t)
+	u := w.updater("host-1")
+	w.publish(next("host-2"))
+	if err := u.Apply(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	return w
+}
+
+func (w *world) guard() (bool, error) {
+	return Guard(Config{Exe: w.exe, StateDir: filepath.Join(w.dir, "state"), MaxStarts: 3})
+}
+
+func TestGuardRollsBackABinaryThatNeverReachesItsOwnCode(t *testing.T) {
+	w := installed(t)
+	// The new binary prints its version for the probe but dies as soon as it really starts: only
+	// something outside it can count those starts.
+	broken := []byte("#!/bin/sh\nif [ \"$1\" = \"-v\" ]; then echo host-2; exit 0; fi\nexit 1\n")
+	if err := os.WriteFile(w.exe, broken, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i <= 3; i++ {
+		if rolled, err := w.guard(); err != nil || rolled {
+			t.Fatalf("start %d: rolled=%v err=%v; the new binary gets three tries", i, rolled, err)
+		}
+	}
+	rolled, err := w.guard()
+	if err != nil || !rolled {
+		t.Fatalf("start 4: rolled=%v err=%v, want a rollback", rolled, err)
+	}
+	if w.exeContent() != string(script("host-1")) {
+		t.Errorf("binary after rollback = %q, want the previous one", w.exeContent())
+	}
+	st := w.updater("host-1").Status()
+	if st.Pending != "" || st.RolledBack != "host-2" || st.Error == "" {
+		t.Errorf("status = %+v, want the rollback explained", st)
+	}
+	old := w.updater("host-1")
+	w.publish(next("host-2"))
+	if err := old.Check(context.Background()); err != nil || old.Status().Available != "" {
+		t.Errorf("the rolled-back release is offered again: %v %+v", err, old.Status())
+	}
+}
+
+func TestGuardCountsABinaryThatCannotEvenReportItsVersion(t *testing.T) {
+	w := installed(t)
+	if err := os.WriteFile(w.exe, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 3; i++ {
+		_, _ = w.guard()
+	}
+	if rolled, err := w.guard(); err != nil || !rolled {
+		t.Errorf("rolled=%v err=%v: a binary that does not even run must be replaced too", rolled, err)
+	}
+}
+
+func TestGuardLeavesAConfirmedOrUnrelatedBinaryAlone(t *testing.T) {
+	w := installed(t)
+	running, _ := w.start("host-2")
+	running.Confirm()
+	for i := 0; i < 10; i++ {
+		if rolled, err := w.guard(); err != nil || rolled {
+			t.Fatalf("a confirmed binary was touched: rolled=%v err=%v", rolled, err)
+		}
+	}
+	if w.exeContent() != string(script("host-2")) {
+		t.Error("binary changed")
+	}
+
+	// Nothing installed by an update: nothing to guard.
+	empty := newWorld(t)
+	if rolled, err := empty.guard(); err != nil || rolled {
+		t.Errorf("a host that never updated: rolled=%v err=%v", rolled, err)
+	}
+}
+
+func TestGuardDropsAMarkThatBelongsToAnotherBinary(t *testing.T) {
+	w := installed(t)
+	if err := os.WriteFile(w.exe, script("host-1"), 0o755); err != nil { // put back by hand
+		t.Fatal(err)
+	}
+	for i := 0; i < 6; i++ {
+		if rolled, err := w.guard(); err != nil || rolled {
+			t.Fatalf("rolled=%v err=%v for a binary the update did not install", rolled, err)
+		}
+	}
+	if st := w.updater("host-1").Status(); st.Pending != "" {
+		t.Errorf("status = %+v, the stale mark should be gone", st)
+	}
+}
+
+func TestOnceTheGuardCountsTheBinaryDoesNotCountAgain(t *testing.T) {
+	w := installed(t)
+	if _, err := w.guard(); err != nil {
+		t.Fatal(err)
+	}
+	// With the guard in charge, the binary's own start-up must not double the count.
+	for i := 0; i < 5; i++ {
+		if _, rolled := w.start("host-2"); rolled {
+			t.Fatal("AtStart rolled back although the guard is the one counting")
+		}
+	}
+	for i := 0; i < 2; i++ {
+		if rolled, _ := w.guard(); rolled {
+			t.Fatalf("rolled back at guard run %d, only the guard's own count matters", i+2)
+		}
+	}
+	if rolled, _ := w.guard(); !rolled {
+		t.Error("the guard did not roll back after its own fourth count")
+	}
+}

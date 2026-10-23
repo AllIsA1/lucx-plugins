@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/AllIsA1/lucx-plugins/internal/agent"
+	"github.com/AllIsA1/lucx-plugins/internal/hostupdate"
 	"github.com/AllIsA1/lucx-plugins/keys"
 )
 
@@ -31,11 +32,14 @@ var trustedKeys = keys.Builds
 
 const (
 	defaultConfig  = "/etc/lucx-plugins/config"
-	usage          = "usage: lucx-plugins-sync [-config <file>] [-index-url <url>] <at-start|check|apply|restore|status|version>\n"
+	usage          = "usage: lucx-plugins-sync [-config <file>] [-index-url <url>] <at-start|check|apply|restore|status|version>\n       lucx-plugins-sync [-host-exe <file>] [-host-state <dir>] host-guard\n"
 	defaultPanel   = "/usr/local/x-ui/x-ui"
 	defaultState   = "/var/lib/lucx-plugins"
 	defaultService = "x-ui"
 	defaultRestart = "04:00"
+
+	defaultHostExe   = "/usr/local/lucx-plugins/lucx-plugin-host"
+	defaultHostState = "/var/lib/lucx-plugin-host"
 )
 
 type config struct {
@@ -95,6 +99,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(io.Discard)
 	confPath := fs.String("config", defaultConfig, "configuration file")
 	indexFlag := fs.String("index-url", "", "builds list address (default: the published list)")
+	hostExe := fs.String("host-exe", defaultHostExe, "host-guard: the plugin host binary")
+	hostState := fs.String("host-state", defaultHostState, "host-guard: the plugin host's state directory")
 	if err := fs.Parse(args); err != nil || fs.NArg() != 1 {
 		fmt.Fprint(stderr, usage)
 		return 2
@@ -103,6 +109,9 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if command == "version" {
 		fmt.Fprintln(stdout, version)
 		return 0
+	}
+	if command == "host-guard" {
+		return hostGuard(*hostExe, *hostState, stderr)
 	}
 	if !map[string]bool{"at-start": true, "check": true, "apply": true, "restore": true, "status": true}[command] {
 		fmt.Fprint(stderr, usage)
@@ -160,6 +169,19 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		printStatus(stdout, a.Status(), cfg)
 		return 0
 	}
+}
+
+// hostGuard is the plugin host's pre-start step: it counts the starts of a freshly updated host and
+// puts the previous binary back when the new one keeps failing. Whatever happens, the host still starts.
+func hostGuard(exe, stateDir string, stderr io.Writer) int {
+	rolledBack, err := hostupdate.Guard(hostupdate.Config{Exe: exe, StateDir: stateDir})
+	switch {
+	case err != nil:
+		fmt.Fprintf(stderr, "lucx-plugins: %v\n", err)
+	case rolledBack:
+		fmt.Fprintln(stderr, "lucx-plugins: the updated plugin host did not start properly and was rolled back to the previous release")
+	}
+	return 0
 }
 
 func report(stderr io.Writer, err error) int {

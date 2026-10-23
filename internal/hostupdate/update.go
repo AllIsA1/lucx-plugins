@@ -77,6 +77,9 @@ type Status struct {
 type pending struct {
 	Version string `json:"version"`
 	Starts  int    `json:"starts"`
+	// Guard is set once something outside the host (the service manager's pre-start step) counts the
+	// starts; the host then leaves counting to it, since it cannot count starts that die before main.
+	Guard bool `json:"guard,omitempty"`
 }
 
 type state struct {
@@ -449,6 +452,10 @@ func (u *Updater) AtStart() (rolledBack bool, err error) {
 		u.mu.Unlock()
 		return false, nil
 	}
+	if p.Guard {
+		u.mu.Unlock()
+		return false, nil
+	}
 	p.Starts++
 	if p.Starts <= u.cfg.MaxStarts {
 		u.save()
@@ -501,4 +508,60 @@ func (u *Updater) Watch(ctx context.Context, first time.Duration) {
 		}
 		timer.Reset(CheckEvery)
 	}
+}
+
+// Guard is the pre-start step of the service manager, run by a separate program before every start
+// of the host. It counts the starts of a freshly installed binary from outside, so a binary that
+// cannot reach its own code is still replaced by the previous one after MaxStarts failed starts. It
+// reports whether it rolled back; the caller (and the service manager) starts the host either way.
+func Guard(cfg Config) (rolledBack bool, err error) {
+	if cfg.MaxStarts <= 0 {
+		cfg.MaxStarts = 3
+	}
+	u := New(cfg)
+	u.run.Lock()
+	defer u.run.Unlock()
+	u.mu.Lock()
+	p := u.st.Pending
+	u.mu.Unlock()
+	if p == nil {
+		return false, nil
+	}
+	running := binaryVersion(cfg.Exe)
+	u.mu.Lock()
+	if running != "" && running != p.Version {
+		u.st.Pending = nil
+		u.save()
+		u.mu.Unlock()
+		return false, nil
+	}
+	p.Guard = true
+	p.Starts++
+	if p.Starts <= cfg.MaxStarts {
+		u.save()
+		u.mu.Unlock()
+		return false, nil
+	}
+	u.mu.Unlock()
+	if err := copyFile(cfg.Exe+".prev", cfg.Exe); err != nil {
+		return false, fmt.Errorf("%s keeps failing to start and the previous binary cannot be restored: %w", p.Version, err)
+	}
+	u.mu.Lock()
+	u.st.Pending, u.st.RolledBack = nil, p.Version
+	u.st.Rejected = append(u.st.Rejected, p.Version)
+	u.st.Error = fmt.Sprintf("%s did not start properly and was rolled back", p.Version)
+	u.save()
+	u.mu.Unlock()
+	return true, nil
+}
+
+// binaryVersion asks a binary for its version; empty when it cannot say.
+func binaryVersion(path string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, path, "-v").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }

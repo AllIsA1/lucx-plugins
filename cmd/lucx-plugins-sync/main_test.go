@@ -107,3 +107,42 @@ func TestIndexURLPrecedenceIsFlagThenEnvironmentThenConfig(t *testing.T) {
 		t.Errorf("with nothing set the agent default must apply, got %q", got)
 	}
 }
+
+func TestHostGuardRollsBackAHostThatKeepsFailingAndNeverBlocksTheStart(t *testing.T) {
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "lucx-plugin-host")
+	state := filepath.Join(dir, "state")
+	if err := os.MkdirAll(state, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	broken := "#!/bin/sh\nif [ \"$1\" = \"-v\" ]; then echo host-2; exit 0; fi\nexit 1\n"
+	previous := "#!/bin/sh\necho host-1\n"
+	for path, body := range map[string]string{exe: broken, exe + ".prev": previous} {
+		if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(state, "update.json"), []byte(`{"pending":{"version":"host-2","starts":3}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, stderr, code := invoke(t, "-host-exe", exe, "-host-state", state, "host-guard")
+	if code != 0 {
+		t.Fatalf("host-guard exited %d (%s): it must never keep the host from starting", code, stderr)
+	}
+	if got, _ := os.ReadFile(exe); string(got) != previous {
+		t.Errorf("binary = %q, want the previous release restored", got)
+	}
+	if !strings.Contains(stderr, "rolled back") {
+		t.Errorf("stderr = %q, want the rollback said", stderr)
+	}
+
+	// Nothing pending, or nothing there at all: quiet success.
+	for _, args := range [][]string{
+		{"-host-exe", exe, "-host-state", state, "host-guard"},
+		{"-host-exe", filepath.Join(dir, "missing"), "-host-state", filepath.Join(dir, "none"), "host-guard"},
+	} {
+		if _, stderr, code := invoke(t, args...); code != 0 {
+			t.Errorf("host-guard %v = %d %q", args, code, stderr)
+		}
+	}
+}
