@@ -220,3 +220,16 @@ export type PluginFrameToken = z.infer<typeof PluginFrameTokenSchema>;
 export type UpdatePreview = z.infer<typeof UpdatePreviewSchema>;
 export type CatalogPlugin = z.infer<typeof CatalogPluginSchema>;
 export type CatalogView = z.infer<typeof CatalogViewSchema>;
+
+// The plugin system service itself (not a plugin): what it runs and whether a newer release is ready.
+export const PluginSystemSchema = z.object({
+  managed: z.boolean(),
+  version: z.string(),
+  available: z.string(),
+  checkedAt: z.string(),
+  busy: z.boolean(),
+  pending: z.string(),
+  rolledBack: z.string(),
+  error: z.string(),
+});
+export type PluginSystem = z.infer<typeof PluginSystemSchema>;

@@ -72,6 +72,7 @@ export const keys = {
     root: () => ['plugins'] as const,
     state: () => ['plugins', 'state'] as const,
     ui: () => ['plugins', 'ui'] as const,
+    system: () => ['plugins', 'system'] as const,
     frameToken: (id: string) => ['plugins', 'frame-token', id] as const,
     catalog: () => ['plugins', 'catalog'] as const,
     updatePreview: (id: string, ref: string) => ['plugins', 'update-preview', id, ref] as const,

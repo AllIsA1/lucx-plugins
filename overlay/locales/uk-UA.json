@@ -183,6 +183,22 @@
         "listed": "Є в підписаному каталозі.",
         "unlisted": "Цього коміту немає в підписаному каталозі: цей код ніхто не перевіряв. Встановлюйте його, лише якщо довіряєте автору.",
         "notPublished": "Каталог ще не опубліковано. Плагіни все ще можна ставити за посиланням."
+      },
+      "system": {
+        "title": "Plugin system",
+        "desc": "The service that installs and runs plugins. It updates on its own: the panel, your plugins and VPN connections keep running while it restarts.",
+        "version": "Installed release: {version}",
+        "available": "A newer release is available: {version}",
+        "upToDate": "The plugin system is up to date.",
+        "checkedAt": "Checked {time}.",
+        "check": "Check for updates",
+        "update": "Update",
+        "confirmTitle": "Update the plugin system to {version}?",
+        "confirmBody": "The service downloads the signed release, verifies it and restarts. Plugin pages are unavailable for a few seconds; the panel, running plugins and VPN connections are not affected. If the new release fails to start, the previous one is restored.",
+        "restarting": "Updating to {version}. Waiting for the plugin system to come back…",
+        "updated": "The plugin system was updated to {version}",
+        "rolledBack": "{version} did not start properly and was rolled back to the previous release.",
+        "timeout": "The plugin system did not come back in time. Check the service on the server."
       }
     }
   }

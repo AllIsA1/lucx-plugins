@@ -46,6 +46,7 @@ import PluginPreviewModal from '@/pages/plugins/PluginPreviewModal';
 import ProcessesNotice from '@/pages/plugins/ProcessesNotice';
 import PluginStatus from '@/pages/plugins/PluginStatus';
 import RollbackModal from '@/pages/plugins/RollbackModal';
+import SystemCard from '@/pages/plugins/SystemCard';
 import UpdateModal from '@/pages/plugins/UpdateModal';
 import { isDangerousPermission, shortCommit, sourceUrl } from '@/pages/plugins/permissions';
 import './PluginsPage.css';
@@ -360,6 +361,9 @@ export default function PluginsPage() {
       )}
       {state?.available && (
         <ArchiveMirrorCard key={state.customArchiveBase} state={state} onSaved={refresh} />
+      )}
+      {state?.available && (
+        <SystemCard onUpdated={refresh} onToast={(text) => messageApi.success(text)} />
       )}
 
       {preview && (

@@ -12,6 +12,7 @@ import {
   PluginPreviewSchema,
   PluginFrameTokenSchema,
   PluginsStateSchema,
+  PluginSystemSchema,
   PluginUiSchema,
   UpdatePreviewSchema,
   type CatalogView,
@@ -20,11 +21,12 @@ import {
   type PluginPreview,
   type PluginFrameToken,
   type PluginsState,
+  type PluginSystem,
   type PluginUi,
   type UpdatePreview,
 } from '@/schemas/plugins';
 
-export type { NodePluginStatus, PluginEntry, PluginPreview, PluginsState, PluginUi };
+export type { NodePluginStatus, PluginEntry, PluginPreview, PluginsState, PluginSystem, PluginUi };
 export type { CatalogView, PluginFrameToken, UpdatePreview };
 
 const JSON_HEADERS = { headers: { 'Content-Type': 'application/json' } };
@@ -133,6 +135,14 @@ export const pluginsApi = {
     ),
   setMasterManagement: (allow: boolean): Promise<Msg<null>> =>
     HttpUtil.post<null>(`${BASE}/master-management`, { allow }, JSON_HEADERS),
+  system: async (): Promise<Msg<PluginSystem>> => {
+    const raw = await HttpUtil.get<PluginSystem>(`${BASE}/system`, undefined, { silent: true });
+    return parseMsg(raw, PluginSystemSchema, 'plugins/system');
+  },
+  systemCheck: (): Promise<Msg<null>> =>
+    HttpUtil.post<null>(`${BASE}/system/check`, {}, JSON_HEADERS),
+  systemUpdate: (): Promise<Msg<null>> =>
+    HttpUtil.post<null>(`${BASE}/system/update`, {}, JSON_HEADERS),
   saveArchiveBase: (archiveBase: string): Promise<Msg<null>> =>
     HttpUtil.post<null>(`${BASE}/settings`, { archiveBase }, JSON_HEADERS),
   nodes: async (): Promise<Msg<NodePluginStatus[]>> => {
