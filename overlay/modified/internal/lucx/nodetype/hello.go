@@ -22,7 +22,11 @@ func LocalHello() HelloObj {
 	hs := awg.CollectHostStatus()
 	features := make([]string, len(DefaultLucXFeatures), len(DefaultLucXFeatures)+1)
 	copy(features, DefaultLucXFeatures)
-	features = append(features, FeaturePlugins)
+	// LUCX-HOOK: a node announces plugins only while the plugin system service answers it.
+	if PluginSystemAvailable != nil && PluginSystemAvailable() {
+		features = append(features, FeaturePlugins)
+	}
+	// END LUCX-HOOK
 	return HelloObj{
 		Version:    config.GetPanelVersion(),
 		Features:   features,

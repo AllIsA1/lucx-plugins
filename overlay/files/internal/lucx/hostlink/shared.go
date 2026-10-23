@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/eventbus"
+	"github.com/mhsanaei/3x-ui/v3/internal/lucx/nodetype"
 )
 
 // The panel has one plugin host, so it has one link. The functions below are what the rest of the
@@ -36,6 +37,8 @@ func SetShared(l *Link) {
 	defer sharedMu.Unlock()
 	shared = l
 }
+
+func init() { nodetype.PluginSystemAvailable = func() bool { return Shared().Available() } }
 
 // Start begins talking to the host. It never fails and never blocks.
 func Start() { Shared().Start() }

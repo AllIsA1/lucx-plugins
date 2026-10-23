@@ -90,6 +90,7 @@ type Link struct {
 
 	subs   atomic.Pointer[subscriptions]
 	status atomic.Pointer[Status]
+	lastOK atomic.Int64 // unix seconds of the last handshake that found a compatible host
 
 	events chan []byte
 	kick   chan struct{}
@@ -183,6 +184,7 @@ func (l *Link) Stop() {
 	l.done.Wait()
 	l.slow.CloseIdleConnections()
 	l.subs.Store(&subscriptions{})
+	l.lastOK.Store(0)
 	l.setStatus(Status{Reason: notStartedReason(l.cfg)})
 }
 
@@ -238,7 +240,20 @@ func (l *Link) Refresh(ctx context.Context) {
 		s.pipelines[p] = struct{}{}
 	}
 	l.subs.Store(s)
+	l.lastOK.Store(time.Now().Unix())
 	l.setStatus(Status{Connected: true, Compatible: true, HostVersion: hello.Host})
+}
+
+// availableGrace keeps a host that is only restarting (a self-update takes seconds) from looking gone.
+const availableGrace = time.Minute
+
+// Available reports whether a compatible host answered a moment ago.
+func (l *Link) Available() bool {
+	if l.Status().Compatible {
+		return true
+	}
+	last := l.lastOK.Load()
+	return last != 0 && time.Now().Unix()-last < int64(availableGrace/time.Second)
 }
 
 // Kick asks for a handshake soon; the admin proxy calls it after every change so a freshly enabled

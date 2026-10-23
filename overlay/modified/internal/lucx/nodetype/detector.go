@@ -25,6 +25,10 @@ const (
 // command. It is announced by the node itself and never inferred.
 const FeaturePlugins = "plugins"
 
+// PluginSystemAvailable tells whether this panel's plugin system service is reachable right now; the
+// plugin link sets it. Until it says yes the node does not announce FeaturePlugins.
+var PluginSystemAvailable func() bool
+
 var DefaultLucXFeatures = []string{
 	"awg",
 	"mtproto",

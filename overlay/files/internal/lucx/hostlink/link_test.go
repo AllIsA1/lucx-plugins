@@ -9,11 +9,13 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"slices"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/eventbus"
+	"github.com/mhsanaei/3x-ui/v3/internal/lucx/nodetype"
 )
 
 type hostState struct {
@@ -250,4 +252,45 @@ func TestAHostThatStartsLaterIsFoundQuickly(t *testing.T) {
 	go func() { _ = srv.Serve(ln) }()
 	defer srv.Close()
 	waitFor(t, func() bool { return l.Wanted("client.created") })
+}
+
+func TestAvailableMeansAHostAnsweredRecentlyAndIsNotShakenByARestart(t *testing.T) {
+	s := &hostState{api: IntegrationAPI}
+	l := started(t, s)
+	if !l.Available() {
+		t.Fatal("a host that answers is not available")
+	}
+	// The host goes away for a moment (a self-update restarts it): still available within the grace.
+	l.Refresh(context.Background())
+	l.setStatus(Status{Reason: "the plugin system service is not running"})
+	if !l.Available() {
+		t.Error("a host that was there seconds ago looks gone: masters would see the node flap")
+	}
+	l.lastOK.Store(time.Now().Add(-2 * availableGrace).Unix())
+	if l.Available() {
+		t.Error("a host that has been gone for minutes is still announced")
+	}
+	if New(Config{HostSocket: socketPath(t, "x.sock")}).Available() {
+		t.Error("a link that never met a host is available")
+	}
+	l.Stop()
+	if l.Available() {
+		t.Error("a stopped link is available")
+	}
+}
+
+func TestTheNodeAnnouncesPluginsOnlyForAReachableHost(t *testing.T) {
+	s := &hostState{api: IntegrationAPI}
+	l := started(t, s)
+	prev := Shared()
+	SetShared(l)
+	defer SetShared(prev)
+	has := func() bool { return slices.Contains(nodetype.LocalHello().Features, nodetype.FeaturePlugins) }
+	if !has() {
+		t.Error("a node with a reachable host does not announce plugins")
+	}
+	l.Stop()
+	if has() {
+		t.Error("a node without a host announces plugins")
+	}
 }
