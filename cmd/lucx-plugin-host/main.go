@@ -50,7 +50,7 @@ func main() {
 	flag.StringVar(&cfg.StateDir, "state-dir", envOr("LUCX_HOST_STATE_DIR", "/var/lib/lucx-plugin-host"), "registry, keys and plugin code")
 	flag.StringVar(&cfg.Socket, "socket", envOr("LUCX_HOST_SOCKET", "/run/lucx-plugin-host/host.sock"), "unix socket the panel talks to")
 	flag.StringVar(&cfg.Gateway, "gateway", envOr("LUCX_HOST_GATEWAY", "127.0.0.1:19480"), "loopback address plugins call the panel API on")
-	flag.StringVar(&cfg.PanelSocket, "panel-socket", envOr("LUCX_HOST_PANEL_SOCKET", "/run/lucx-plugin-host/panel.sock"), "the panel's internal API socket")
+	flag.StringVar(&cfg.PanelSocket, "panel-socket", envOr("LUCX_HOST_PANEL_SOCKET", "/run/lucx-panel/internal.sock"), "the panel's internal API socket")
 	showVersion := flag.Bool("v", false, "print the version")
 	flag.Parse()
 	if *showVersion {
