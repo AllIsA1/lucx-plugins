@@ -35,6 +35,7 @@ type PreviousVersion struct {
 	ManifestSHA256 string   `json:"manifestSha256,omitempty"`
 	Permissions    []string `json:"permissions"`
 	UI             UISpec   `json:"ui"`
+	Seams          []Seam   `json:"seams,omitempty"`
 }
 
 // PermissionDiff compares the permissions an update asks for with those the operator granted.
@@ -144,13 +145,13 @@ func (m *Manager) previewUpdate(ctx context.Context, id, ref string, expect *Cat
 func snapshot(e Entry) *PreviousVersion {
 	return &PreviousVersion{
 		Name: e.Name, Version: e.Version, Type: e.Type, Scope: e.Scope, Commit: e.Commit,
-		ManifestSHA256: e.ManifestSHA256, Permissions: slices.Clone(e.Permissions), UI: e.UI,
+		ManifestSHA256: e.ManifestSHA256, Permissions: slices.Clone(e.Permissions), UI: e.UI, Seams: cloneSeams(e.Seams),
 	}
 }
 
 func restore(e Entry, p *PreviousVersion) Entry {
 	e.Name, e.Version, e.Type, e.Scope, e.Commit = p.Name, p.Version, p.Type, p.Scope, p.Commit
-	e.ManifestSHA256, e.Permissions, e.UI, e.Previous, e.DisabledReason = p.ManifestSHA256, slices.Clone(p.Permissions), p.UI, nil, ""
+	e.ManifestSHA256, e.Permissions, e.UI, e.Seams, e.Previous, e.DisabledReason = p.ManifestSHA256, slices.Clone(p.Permissions), p.UI, cloneSeams(p.Seams), nil, ""
 	return e
 }
 
@@ -195,7 +196,7 @@ func (m *Manager) ApplyUpdate(ctx context.Context, id, token string, accepted []
 	}
 	next := entry
 	next.Name, next.Version, next.Type, next.Scope = manifest.Name, manifest.Version, manifest.Type, manifest.Scope
-	next.Commit, next.ManifestSHA256, next.UI, next.DisabledReason = s.preview.Commit, s.manifestSHA256, manifest.UI, ""
+	next.Commit, next.ManifestSHA256, next.UI, next.Seams, next.DisabledReason = s.preview.Commit, s.manifestSHA256, manifest.UI, manifest.Seams, ""
 	next.Permissions = normalizePermissions(manifest.Permissions)
 	next.Previous = snapshot(entry)
 	if err := m.reg.Put(next); err != nil {

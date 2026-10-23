@@ -412,6 +412,7 @@ func (m *Manager) install(token string, accepted []string, managedByMaster bool)
 		Permissions:     normalizePermissions(manifest.Permissions),
 		ManagedByMaster: managedByMaster,
 		UI:              manifest.UI,
+		Seams:           manifest.Seams,
 	}
 	if err := m.reg.Put(entry); err != nil {
 		_ = os.RemoveAll(target)

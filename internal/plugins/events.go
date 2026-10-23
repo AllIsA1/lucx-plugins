@@ -24,6 +24,7 @@ const (
 
 type pluginStats struct {
 	sent, failed, dropped, pipelineErrors int
+	seamCalls, seamErrors, seamSkipped    int
 	lastError                             string
 }
 

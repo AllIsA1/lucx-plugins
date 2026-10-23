@@ -34,6 +34,11 @@ type SupervisorOptions struct {
 	MaxProxyBody    int64
 	PipelineTimeout time.Duration
 	HookTimeout     time.Duration
+	// SeamTimeout bounds one call of a plugin's seam; after SeamBreakerThreshold failures in a row the
+	// plugin is left alone for SeamBreakerCooldown and the panel's own code runs.
+	SeamTimeout          time.Duration
+	SeamBreakerThreshold int
+	SeamBreakerCooldown  time.Duration
 }
 
 // PluginRuntime is what the UI shows about a plugin's process.
@@ -49,6 +54,9 @@ type PluginRuntime struct {
 	EventsFailed   int    `json:"eventsFailed,omitempty"`
 	EventsDropped  int    `json:"eventsDropped,omitempty"`
 	PipelineErrors int    `json:"pipelineErrors,omitempty"`
+	SeamCalls      int    `json:"seamCalls,omitempty"`
+	SeamErrors     int    `json:"seamErrors,omitempty"`
+	SeamSkipped    int    `json:"seamSkipped,omitempty"`
 	LastError      string `json:"lastError,omitempty"`
 }
 
@@ -72,6 +80,9 @@ type Supervisor struct {
 
 	cacheMu    sync.Mutex
 	patchCache map[string]cachedPatch
+
+	seamMu     sync.Mutex
+	seamStates map[string]*seamState
 
 	queueMu sync.Mutex
 	queues  map[string]chan eventJob
@@ -97,6 +108,15 @@ func NewSupervisor(m *Manager, r Runner, opt SupervisorOptions) *Supervisor {
 	if opt.HookTimeout <= 0 {
 		opt.HookTimeout = defaultHookTimeout
 	}
+	if opt.SeamTimeout <= 0 {
+		opt.SeamTimeout = defaultSeamTimeout
+	}
+	if opt.SeamBreakerThreshold <= 0 {
+		opt.SeamBreakerThreshold = defaultSeamBreakerThreshold
+	}
+	if opt.SeamBreakerCooldown <= 0 {
+		opt.SeamBreakerCooldown = defaultSeamBreakerCooldown
+	}
 	if opt.PipelineTimeout <= 0 {
 		opt.PipelineTimeout = defaultPipelineTimeout
 	}
@@ -112,6 +132,7 @@ func NewSupervisor(m *Manager, r Runner, opt SupervisorOptions) *Supervisor {
 		queues:    map[string]chan eventJob{},
 
 		patchCache: map[string]cachedPatch{},
+		seamStates: map[string]*seamState{},
 	}
 	m.SetProcessController(s)
 	return s
@@ -401,6 +422,7 @@ func (s *Supervisor) Runtime(id string) (PluginRuntime, bool) {
 	if st := s.stats[id]; st != nil {
 		rt.EventsSent, rt.EventsFailed, rt.EventsDropped = st.sent, st.failed, st.dropped
 		rt.PipelineErrors, rt.LastError = st.pipelineErrors, st.lastError
+		rt.SeamCalls, rt.SeamErrors, rt.SeamSkipped = st.seamCalls, st.seamErrors, st.seamSkipped
 	}
 	s.statsMu.Unlock()
 	return rt, true

@@ -37,6 +37,7 @@ type Entry struct {
 	ManagedByMaster bool             `json:"managedByMaster,omitempty"`
 	InstallHookDone bool             `json:"installHookDone,omitempty"`
 	UI              UISpec           `json:"ui"`
+	Seams           []Seam           `json:"seams,omitempty"`
 	Previous        *PreviousVersion `json:"previous,omitempty"`
 	InstalledAt     time.Time        `json:"installedAt"`
 	Permissions     []string         `json:"permissions"`
@@ -201,11 +202,25 @@ func (r *Registry) SetAllowMasterManagement(allow bool) error {
 	return r.commitLocked(next)
 }
 
+func cloneSeams(in []Seam) []Seam {
+	if in == nil {
+		return nil
+	}
+	out := make([]Seam, len(in))
+	for i, s := range in {
+		s.Methods = slices.Clone(s.Methods)
+		out[i] = s
+	}
+	return out
+}
+
 func cloneEntry(e Entry) Entry {
 	e.Permissions = slices.Clone(e.Permissions)
 	e.UI = UISpec{Menu: slices.Clone(e.UI.Menu), Replaces: slices.Clone(e.UI.Replaces)}
+	e.Seams = cloneSeams(e.Seams)
 	if e.Previous != nil {
 		prev := *e.Previous
+		prev.Seams = cloneSeams(prev.Seams)
 		prev.Permissions = slices.Clone(prev.Permissions)
 		prev.UI = UISpec{Menu: slices.Clone(prev.UI.Menu), Replaces: slices.Clone(prev.UI.Replaces)}
 		e.Previous = &prev
