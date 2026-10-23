@@ -170,11 +170,22 @@ jobs:
         if: matrix.arch == 'amd64'
         env:
           TAG: ${{ matrix.tag }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           "$GITHUB_WORKSPACE/x-ui-built" -v | tee /tmp/version
           grep -q "${TAG##*-}" /tmp/version
-          ours/scripts/smoke.sh "$GITHUB_WORKSPACE/x-ui-built" 18080
+          # The newest published plugin system service, if there is one: the panel build is checked against it.
+          host=""
+          latest=$(gh release list -R "$GITHUB_REPOSITORY" --limit 200 --json tagName \
+            --jq '[.[].tagName | select(test("^host-[0-9]+$")) | ltrimstr("host-") | tonumber] | max // empty')
+          if [ -n "$latest" ]; then
+            mkdir -p /tmp/hostbin
+            gh release download "host-$latest" -R "$GITHUB_REPOSITORY" -p lucx-plugin-host-linux-amd64 -D /tmp/hostbin
+            chmod +x /tmp/hostbin/lucx-plugin-host-linux-amd64
+            host=/tmp/hostbin/lucx-plugin-host-linux-amd64
+          fi
+          ours/scripts/smoke.sh "$GITHUB_WORKSPACE/x-ui-built" 18080 $host
 
       - name: Fetch and check the original release
         env:
