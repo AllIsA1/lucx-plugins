@@ -121,6 +121,7 @@ func TestSeamRoutesRefuseWhatIsNotARequest(t *testing.T) {
 		"pre without a route":     {"/internal/seam/pre", `{"engine":"api","method":"GET"}`},
 		"post with bad json":      {"/internal/seam/post", "{"},
 		"post without a response": {"/internal/seam/post", `{"request":{"engine":"api","method":"GET","route":"/x"}}`},
+		"post with a bad request": {"/internal/seam/post", `{"request":{"engine":"ws","method":"GET","route":"/x"},"response":{"status":200}}`},
 		"an unknown phase":        {"/internal/seam/sideways", `{}`},
 	} {
 		code, _ := f.do(http.MethodPost, c.path, c.body)
