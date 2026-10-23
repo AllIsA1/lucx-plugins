@@ -60,6 +60,7 @@ type Manifest struct {
 	Permissions     []string `json:"permissions"`
 	UI              UISpec   `json:"ui"`
 	Hooks           HookSpec `json:"hooks"`
+	Seams           []Seam   `json:"seams,omitempty"`
 }
 
 // RunSpec describes how the panel starts a process plugin.
@@ -152,6 +153,9 @@ func (m *Manifest) Validate() error {
 	if err := m.validateRun(); err != nil {
 		return err
 	}
+	if err := m.validateSeams(); err != nil {
+		return err
+	}
 	return m.validateUI()
 }
 
@@ -168,7 +172,7 @@ func (m *Manifest) validatePermissions() error {
 }
 
 func needsProcess(p string) bool {
-	return p == permNetwork || strings.HasPrefix(p, "events:") || strings.HasPrefix(p, "pipeline:")
+	return p == permNetwork || strings.HasPrefix(p, "events:") || strings.HasPrefix(p, "pipeline:") || strings.HasPrefix(p, "seam:")
 }
 
 func (m *Manifest) validateRun() error {

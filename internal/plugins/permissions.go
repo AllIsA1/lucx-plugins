@@ -41,6 +41,11 @@ func ValidatePermission(p string) error {
 			return fmt.Errorf("unknown event in permission %q", p)
 		}
 		return nil
+	case seamPermission.MatchString(p):
+		if group, ok := strings.CutPrefix(p, "seam:api:"); ok && slices.Contains(seamProtectedGroups, group) {
+			return fmt.Errorf("permission %q names routes plugins cannot take part in", p)
+		}
+		return nil
 	case pipelinePermission.MatchString(p):
 		if !IsKnownPipeline(strings.TrimPrefix(p, "pipeline:")) {
 			return fmt.Errorf("unknown pipeline in permission %q", p)
@@ -57,6 +62,7 @@ func IsDangerousPermission(p string) bool {
 		strings.HasPrefix(p, "api:settings:") ||
 		strings.HasPrefix(p, "api:nodes:") ||
 		strings.HasPrefix(p, "pipeline:") ||
+		strings.HasPrefix(p, "seam:") ||
 		strings.HasPrefix(p, "ui:replace:")
 }
 
