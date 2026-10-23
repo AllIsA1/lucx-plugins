@@ -224,11 +224,13 @@ func Parse(data []byte) (*Index, error) {
 	return &i, nil
 }
 
-func message(data []byte) []byte { return append([]byte(signDomain), data...) }
+func message(domain string, data []byte) []byte { return append([]byte(domain), data...) }
 
 // Sign returns the base64 signature of a document; the fixed prefix keeps it from being valid for anything else.
-func Sign(key ed25519.PrivateKey, data []byte) string {
-	return base64.StdEncoding.EncodeToString(ed25519.Sign(key, message(data)))
+func Sign(key ed25519.PrivateKey, data []byte) string { return signWith(signDomain, key, data) }
+
+func signWith(domain string, key ed25519.PrivateKey, data []byte) string {
+	return base64.StdEncoding.EncodeToString(ed25519.Sign(key, message(domain, data)))
 }
 
 // ErrSignature is returned for any signature that does not verify.
@@ -236,6 +238,10 @@ var ErrSignature = errors.New("the signature does not match the document")
 
 // Verify accepts the document if any key of the list signed it.
 func Verify(data []byte, sig string, keys []ed25519.PublicKey) error {
+	return verifyWith(signDomain, data, sig, keys)
+}
+
+func verifyWith(domain string, data []byte, sig string, keys []ed25519.PublicKey) error {
 	if len(keys) == 0 {
 		return errors.New("no public keys to verify with")
 	}
@@ -243,7 +249,7 @@ func Verify(data []byte, sig string, keys []ed25519.PublicKey) error {
 	if err != nil || len(raw) != ed25519.SignatureSize {
 		return fmt.Errorf("%w: unreadable signature", ErrSignature)
 	}
-	msg := message(data)
+	msg := message(domain, data)
 	for _, key := range keys {
 		if ed25519.Verify(key, msg, raw) {
 			return nil

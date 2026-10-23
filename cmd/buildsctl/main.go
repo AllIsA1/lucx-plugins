@@ -31,6 +31,11 @@ const usage = `usage: buildsctl <command> [flags]
   add    -index <file> -meta <file>  add (or replace) a build; creates the index when missing, raises the sequence
   sign   (-key <file> | -key-env <VAR>) -index <file>    validate the index and write <index>.sig
   verify -index <file> -sig <file> -pub <base64 key>[,<key>...]
+
+  host-set    -index <file> -version host-<n> -amd64-sha256 <h> -arm64-sha256 <h>
+              make (or move forward) host.json, the signed record of the current plugin host build
+  host-sign   (-key <file> | -key-env <VAR>) -index <file>    validate host.json and write <index>.sig
+  host-verify -index <file> -sig <file> -pub <base64 key>[,<key>...]
 `
 
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
@@ -54,6 +59,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 		err = sign(args[1:])
 	case "verify":
 		err = verify(args[1:], stdout)
+	case "host-set":
+		err = hostSet(args[1:])
+	case "host-sign":
+		err = hostSign(args[1:])
+	case "host-verify":
+		err = hostVerify(args[1:], stdout)
 	default:
 		fmt.Fprint(stderr, usage)
 		return 2
@@ -243,6 +254,86 @@ func verify(args []string, stdout io.Writer) error {
 		return err
 	}
 	if _, err := builds.Parse(data); err != nil {
+		return err
+	}
+	fmt.Fprintln(stdout, "signature ok")
+	return nil
+}
+
+func hostSet(args []string) error {
+	fs := flags("host-set")
+	path := fs.String("index", "", "host.json to create or update")
+	version := fs.String("version", "", "host-<n>")
+	amd64 := fs.String("amd64-sha256", "", "sha256 of the amd64 binary")
+	arm64 := fs.String("arm64-sha256", "", "sha256 of the arm64 binary")
+	if err := fs.Parse(args); err != nil || *path == "" || *version == "" {
+		return errors.New("host-set needs -index, -version and both hashes")
+	}
+	doc := &builds.HostIndex{Schema: builds.HostSchemaVersion, Sequence: 1}
+	if current, err := os.ReadFile(*path); err == nil {
+		if doc, err = builds.ParseHost(current); err != nil {
+			return fmt.Errorf("the existing %s is invalid: %w", *path, err)
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if err := doc.Set(*version, map[string]string{"amd64": *amd64, "arm64": *arm64}); err != nil {
+		return err
+	}
+	doc.GeneratedAt = time.Now().UTC().Truncate(time.Second)
+	out, err := builds.MarshalHost(doc)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(*path, out, 0o644)
+}
+
+func hostSign(args []string) error {
+	fs := flags("host-sign")
+	file := fs.String("key", "", "signing key file")
+	env := fs.String("key-env", "", "environment variable holding the signing key")
+	path := fs.String("index", "", "host.json")
+	if err := fs.Parse(args); err != nil || *path == "" {
+		return errors.New("host-sign needs a key and -index <file>")
+	}
+	key, err := loadKey(*file, *env)
+	if err != nil {
+		return err
+	}
+	data, err := os.ReadFile(*path)
+	if err != nil {
+		return err
+	}
+	if _, err := builds.ParseHost(data); err != nil {
+		return fmt.Errorf("refusing to sign a document clients would refuse: %w", err)
+	}
+	return os.WriteFile(*path+".sig", []byte(builds.SignHost(key, data)+"\n"), 0o644)
+}
+
+func hostVerify(args []string, stdout io.Writer) error {
+	fs := flags("host-verify")
+	path := fs.String("index", "", "host.json")
+	sigPath := fs.String("sig", "", "host.json.sig")
+	pub := fs.String("pub", "", "base64 public key(s), comma separated")
+	if err := fs.Parse(args); err != nil || *path == "" || *sigPath == "" || *pub == "" {
+		return errors.New("host-verify needs -index, -sig and -pub")
+	}
+	keys, err := builds.ParseKeys(strings.Split(*pub, ","))
+	if err != nil {
+		return err
+	}
+	data, err := os.ReadFile(*path)
+	if err != nil {
+		return err
+	}
+	sig, err := os.ReadFile(*sigPath)
+	if err != nil {
+		return err
+	}
+	if err := builds.VerifyHost(data, string(sig), keys); err != nil {
+		return err
+	}
+	if _, err := builds.ParseHost(data); err != nil {
 		return err
 	}
 	fmt.Fprintln(stdout, "signature ok")

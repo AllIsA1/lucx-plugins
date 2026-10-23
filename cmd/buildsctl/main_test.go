@@ -140,3 +140,70 @@ func TestMetaDerivesTheDownloadAddressesItself(t *testing.T) {
 		t.Errorf("meta accepted an invalid build: %q", errOut)
 	}
 }
+
+func TestHostSetSignVerifyThroughTheCommandLine(t *testing.T) {
+	dir := t.TempDir()
+	key := filepath.Join(dir, "builds.key")
+	pub := must(t, "keygen", "-out", key)
+	index := filepath.Join(dir, "host.json")
+	h := func(c string) string { return strings.Repeat(c, 64) }
+	must(t, "host-set", "-index", index, "-version", "host-1", "-amd64-sha256", h("1"), "-arm64-sha256", h("2"))
+	must(t, "host-set", "-index", index, "-version", "host-2", "-amd64-sha256", h("3"), "-arm64-sha256", h("4"))
+	must(t, "host-sign", "-key", key, "-index", index)
+	must(t, "host-verify", "-index", index, "-sig", index+".sig", "-pub", pub)
+
+	raw, err := os.ReadFile(index)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc, err := builds.ParseHost(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc.Version != "host-2" || doc.Sequence != 3 || doc.GeneratedAt.IsZero() {
+		t.Errorf("document = %+v, want host-2 at sequence 3 with a time", doc)
+	}
+	if b, _ := doc.Binary("arm64"); b.SHA256 != h("4") {
+		t.Errorf("arm64 = %+v", b)
+	}
+
+	if _, _, code := exec(t, "host-set", "-index", index, "-version", "host-1", "-amd64-sha256", h("1"), "-arm64-sha256", h("2")); code == 0 {
+		t.Error("going back to an older release was accepted")
+	}
+	// A builds signature must not pass for the host document and the other way round.
+	if _, _, code := exec(t, "verify", "-index", index, "-sig", index+".sig", "-pub", pub); code == 0 {
+		t.Error("a host document verified as a builds list")
+	}
+	if err := os.WriteFile(index, append(raw, ' '), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, code := exec(t, "host-verify", "-index", index, "-sig", index+".sig", "-pub", pub); code == 0 {
+		t.Error("a modified host document verified")
+	}
+}
+
+func TestHostSignRefusesADocumentClientsWouldRefuse(t *testing.T) {
+	dir := t.TempDir()
+	key := filepath.Join(dir, "builds.key")
+	must(t, "keygen", "-out", key)
+	index := filepath.Join(dir, "host.json")
+	if err := os.WriteFile(index, []byte(`{"schema":1,"sequence":1,"generatedAt":"2026-10-22T00:00:00Z","version":"v1","binaries":[]}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, errOut, code := exec(t, "host-sign", "-key", key, "-index", index); code == 0 || !strings.Contains(errOut, "refusing") {
+		t.Errorf("host-sign must validate first: %d %q", code, errOut)
+	}
+	if _, err := os.Stat(index + ".sig"); err == nil {
+		t.Error("a signature was written for an invalid document")
+	}
+}
+
+func TestHostSetNeedsEveryHash(t *testing.T) {
+	index := filepath.Join(t.TempDir(), "host.json")
+	if _, _, code := exec(t, "host-set", "-index", index, "-version", "host-1", "-amd64-sha256", strings.Repeat("1", 64)); code == 0 {
+		t.Error("a release without the arm64 hash was accepted")
+	}
+	if _, err := os.Stat(index); err == nil {
+		t.Error("a document was written for a refused release")
+	}
+}
