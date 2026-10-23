@@ -37,6 +37,7 @@ type PluginsController struct {
 func NewPluginsController(g *gin.RouterGroup, svc *PluginService) *PluginsController {
 	a := &PluginsController{svc: svc}
 	g.Use(callerContext(), a.masterGate)
+	a.registerNodeRoutes(g)
 	g.GET("/list", a.list)
 	g.GET("/menu", a.menu)
 	g.GET("/catalog", a.catalog)

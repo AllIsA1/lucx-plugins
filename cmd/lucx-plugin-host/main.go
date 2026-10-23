@@ -147,6 +147,19 @@ func run(ctx context.Context, cfg config, up *hostupdate.Updater) error {
 	svc := hostapi.NewPluginService()
 	restart := make(chan struct{}, 1)
 	svc.Updater = up
+	// The master panel's nodes: listed and reached through the panel's internal socket.
+	panel := hostapi.NewPanelLink(cfg.PanelSocket)
+	svc.Nodes = hostapi.NewNodePluginsServiceFor(
+		func() ([]plugins.Entry, error) {
+			m, err := plugins.Get()
+			if err != nil {
+				return nil, err
+			}
+			return m.List(), nil
+		},
+		panel.Nodes, panel.NodeClient,
+	)
+	go svc.Nodes.Run(ctx)
 	svc.RestartHost = func() {
 		select {
 		case restart <- struct{}{}:

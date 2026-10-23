@@ -33,6 +33,8 @@ type PluginService struct {
 	UpdateHealthTimeout time.Duration
 	// Updater replaces the host itself; nil means this host does not update itself.
 	Updater SystemUpdater
+	// Nodes manages the plugins of the master panel's nodes; nil on a host that has no link to a panel's nodes.
+	Nodes *NodePluginsService
 	// RestartHost ends the process so it can start again as the new build; it is called after the update was answered.
 	RestartHost func()
 }

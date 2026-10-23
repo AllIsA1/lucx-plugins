@@ -233,3 +233,68 @@ func TestADevelopmentBuildDoesNotUpdateItself(t *testing.T) {
 		t.Errorf("a host that does not know its own file is managed: %+v", st)
 	}
 }
+
+// TestHostListsTheMastersNodesThroughThePanelsSocket runs the wiring: the host asks the panel's
+// internal socket for the nodes, polls each reachable one through the relay and reports what it read.
+func TestHostListsTheMastersNodesThroughThePanelsSocket(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XUI_PLUGINS_RUNNER", "process")
+	t.Setenv("XUI_PLUGINS_RUNTIME_DIR", filepath.Join(dir, "run"))
+	panelSock := filepath.Join(dir, "panel.sock")
+	ln, err := net.Listen("unix", panelSock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var grant string
+	panel := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		grant = r.Header.Get("X-LucX-Allowed-Routes")
+		switch r.URL.Path {
+		case "/panel/api/nodes/list":
+			_, _ = w.Write([]byte(`{"success":true,"msg":"","obj":[{"id":4,"name":"edge","enable":true,"status":"online","nodeFeatures":["plugins"]}]}`))
+		case "/panel/api/lucx/plugin-relay/4":
+			w.Header().Set("X-LucX-Relayed", "node")
+			_, _ = w.Write([]byte(`{"success":true,"msg":"","obj":{"available":true,"allowMasterManagement":true,"plugins":[]}}`))
+		default:
+			http.NotFound(w, r)
+		}
+	})}
+	go func() { _ = panel.Serve(ln) }()
+	defer panel.Close()
+
+	cfg := config{StateDir: filepath.Join(dir, "state"), Socket: filepath.Join(dir, "host.sock"), Gateway: freeAddr(t), PanelSocket: panelSock, Version: "test"}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- run(ctx, cfg, newUpdater(cfg)) }()
+	defer func() { cancel(); <-done }()
+	client := &http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, "unix", cfg.Socket)
+	}}}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		resp, err := client.Get("http://host/panel/api/plugins/nodes")
+		if err == nil {
+			var m struct {
+				Success bool `json:"success"`
+				Obj     []struct {
+					NodeName string `json:"nodeName"`
+					State    string `json:"state"`
+				} `json:"obj"`
+			}
+			_ = json.NewDecoder(resp.Body).Decode(&m)
+			resp.Body.Close()
+			if m.Success && len(m.Obj) == 1 && m.Obj[0].State == "ok" {
+				if m.Obj[0].NodeName != "edge" {
+					t.Errorf("nodes = %+v", m.Obj)
+				}
+				break
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the nodes were never read through the relay (%v)", err)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if grant != "GET /nodes/list" && grant != "POST /lucx/plugin-relay/:nodeId" {
+		t.Errorf("the host asked the panel with grant %q", grant)
+	}
+}

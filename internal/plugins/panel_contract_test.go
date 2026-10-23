@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -87,5 +88,18 @@ func TestThePanelsBridgeTestsUseTheSDKPluginsShip(t *testing.T) {
 	got := readOverlay(t, overlayFiles+"frontend/src/test/fixtures/lucx-ui-sdk.js")
 	if want != got {
 		t.Error("overlay/files/frontend/src/test/fixtures/lucx-ui-sdk.js differs from examples/sdk/lucx-ui.js: copy the SDK over")
+	}
+}
+
+// The master panel's relay offers the calls a node accepts from a master; both lists must be the same.
+func TestPanelRelayOffersExactlyTheMasterRoutesOfANode(t *testing.T) {
+	want := readOverlay(t, overlayFiles+"internal/web/controller/testdata/master-routes.golden")
+	var got []string
+	for _, r := range MasterRoutes() {
+		got = append(got, r.Method+" /panel/api"+r.Pattern)
+	}
+	slices.Sort(got)
+	if strings.Join(got, "\n")+"\n" != want {
+		t.Errorf("the node accepts from a master:\n%s\nthe panel relay's golden file lists:\n%s", strings.Join(got, "\n"), want)
 	}
 }
