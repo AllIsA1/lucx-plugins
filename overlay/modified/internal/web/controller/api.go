@@ -207,6 +207,9 @@ func (a *APIController) initRouter(g *gin.RouterGroup) {
 	// advertise support, before CSRF/handlers read the body.
 	api.Use(middleware.ConfigEnvelopeMiddleware())
 	api.Use(middleware.CSRFMiddleware())
+	// LUCX-HOOK: plugin seams (after the checks above: a plugin only ever sees an authenticated request)
+	api.Use(hostlink.SeamMiddleware(hostlink.EngineAPI, func(c *gin.Context) string { return relAPIPath(c.FullPath()) }))
+	// END LUCX-HOOK
 
 	api.GET("/openapi.json", ServeOpenAPISpec)
 

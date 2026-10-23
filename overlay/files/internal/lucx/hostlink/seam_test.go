@@ -24,6 +24,8 @@ type seamHost struct {
 	preBody  []string
 	postBody []string
 	preReply string
+	preFn    func(body string) string // when set, decides the pre answer from the request body
+	postFn   func(body string) string // when set, decides the post answer
 	slow     time.Duration
 	status   int
 }
@@ -49,11 +51,19 @@ func (h *seamHost) handler() http.Handler {
 				w.WriteHeader(h.status)
 				return
 			}
+			if h.preFn != nil {
+				_, _ = io.WriteString(w, h.preFn(string(b)))
+				return
+			}
 			_, _ = io.WriteString(w, h.preReply)
 		case "/internal/seam/post":
 			b, _ := io.ReadAll(r.Body)
 			h.postBody = append(h.postBody, string(b))
 			time.Sleep(h.slow)
+			if h.postFn != nil {
+				_, _ = io.WriteString(w, h.postFn(string(b)))
+				return
+			}
 			_, _ = io.WriteString(w, `{"response":{"status":200,"body":"cGx1Z2lu"},"changed":true,"failures":0}`)
 		default:
 			http.NotFound(w, r)
