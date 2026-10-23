@@ -100,6 +100,12 @@ unit=$r/etc/systemd/system/lucx-plugins-host.service
 grep -q "^Restart=always$" "$unit" && grep -q "^KillMode=process$" "$unit" && ok "the unit restarts the service and leaves plugin processes alone" || bad "the unit restarts the service and leaves plugin processes alone"
 grep -q "^ExecStartPre=-+$r/usr/local/lucx-plugins/lucx-plugins-sync -host-exe $r/usr/local/lucx-plugins/lucx-plugin-host -host-state $r/var/lib/lucx-plugin-host host-guard$" "$unit" && ok "a failing update is rolled back by a guard before each start" || bad "a failing update is rolled back by a guard before each start"
 grep -q "^ExecStart=$r/usr/local/lucx-plugins/lucx-plugin-host -state-dir $r/var/lib/lucx-plugin-host$" "$unit" && grep -q "^ReadWritePaths=.*$r/usr/local/lucx-plugins.*/var/lib/x-ui-plugins" "$unit" && ok "the unit names the paths it writes" || bad "the unit names the paths it writes"
+# A listed path that does not exist stops the unit with 226/NAMESPACE (seen on a real server: /var/lib/x-ui-plugins
+# is absent on a fresh machine and after --purge). Only the program's own directory, which the installer creates first, may be plain.
+rw=$(sed -n 's/^ReadWritePaths=//p' "$unit")
+plain=()
+for entry in $rw; do [[ $entry == -* ]] || plain+=("$entry"); done
+[[ ${#plain[@]} -eq 1 && ${plain[0]} == "$r/usr/local/lucx-plugins" ]] && ok "no required path can be missing when the unit starts" || bad "no required path can be missing when the unit starts" "plain entries: ${plain[*]}"
 grep -q "^RuntimeDirectory=lucx-panel$" "$r/etc/systemd/system/x-ui.service.d/30-lucx-plugins.conf" && ok "the panel gets a runtime directory for its socket" || bad "the panel gets a runtime directory for its socket"
 grep -q "enable lucx-plugins-host.service" "$r/systemctl.log" && grep -q "restart lucx-plugins-host.service" "$r/systemctl.log" && ok "the service is enabled and (re)started" || bad "the service is enabled and (re)started"
 host_unit_name=$(bash -c 'source installer/common.sh; echo "$HOST_UNIT_NAME"')

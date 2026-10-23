@@ -125,7 +125,8 @@ RuntimeDirectoryMode=0755
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=full
-ReadWritePaths=$BIN_DIR $HOST_STATE /var/lib/x-ui-plugins /run
+# Every path but the first has a dash: systemd refuses to start the unit (226/NAMESPACE) when a listed path does not exist.
+ReadWritePaths=$BIN_DIR -$HOST_STATE -/var/lib/x-ui-plugins -/run
 
 [Install]
 WantedBy=multi-user.target
