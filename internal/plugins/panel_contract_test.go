@@ -119,3 +119,34 @@ func TestTheServicesOwnUnitIsNotAPluginUnit(t *testing.T) {
 		t.Error("the check no longer recognises a real plugin unit, so it proves nothing")
 	}
 }
+
+// The panel decides by itself whether a seam takes part in a request (it must not ask the service
+// for every request); the vectors below are checked here against the service's rule and in the
+// panel's tests against its own copy.
+func TestSeamMatchingAgreesWithThePanelsGoldenVectors(t *testing.T) {
+	raw := readOverlay(t, overlayFiles+"internal/lucx/hostlink/testdata/seam_match.golden")
+	n := 0
+	for _, line := range strings.Split(raw, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		p := strings.Split(line, "|")
+		if len(p) != 6 {
+			t.Fatalf("bad vector %q", line)
+		}
+		var methods []string
+		if p[2] != "-" {
+			methods = strings.Split(p[2], ",")
+		}
+		s := Seam{Engine: p[0], Route: p[1], Methods: methods}
+		got := SeamRouteMatches(s.Engine, s.Route, p[3]) && s.SeamMethodMatches(p[4])
+		if got != (p[5] == "1") {
+			t.Errorf("%s: the service says %v", line, got)
+		}
+		n++
+	}
+	if n < 30 {
+		t.Fatalf("only %d vectors read", n)
+	}
+}

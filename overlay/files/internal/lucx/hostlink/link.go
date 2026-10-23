@@ -80,6 +80,7 @@ type Status struct {
 type subscriptions struct {
 	events    map[string]struct{}
 	pipelines map[string]struct{}
+	seams     []seamRow // only from a host that announced the seams capability this panel knows
 }
 
 // Link is one panel's connection to the plugin host.
@@ -90,7 +91,9 @@ type Link struct {
 
 	subs   atomic.Pointer[subscriptions]
 	status atomic.Pointer[Status]
-	lastOK atomic.Int64 // unix seconds of the last handshake that found a compatible host
+
+	seamTimeout time.Duration // 0: the default; tests shorten it
+	lastOK      atomic.Int64  // unix seconds of the last handshake that found a compatible host
 
 	events chan []byte
 	kick   chan struct{}
@@ -207,8 +210,9 @@ func (l *Link) getJSON(ctx context.Context, path string, into any) error {
 // Refresh runs the handshake now and reloads what plugins subscribed to.
 func (l *Link) Refresh(ctx context.Context) {
 	var hello struct {
-		IntegrationAPI int    `json:"integrationApi"`
-		Host           string `json:"host"`
+		IntegrationAPI int            `json:"integrationApi"`
+		Host           string         `json:"host"`
+		Capabilities   map[string]int `json:"capabilities"`
 	}
 	if err := l.getJSON(ctx, "/internal/hello", &hello); err != nil {
 		l.subs.Store(&subscriptions{})
@@ -224,8 +228,9 @@ func (l *Link) Refresh(ctx context.Context) {
 		return
 	}
 	var list struct {
-		Events    []string `json:"events"`
-		Pipelines []string `json:"pipelines"`
+		Events    []string  `json:"events"`
+		Pipelines []string  `json:"pipelines"`
+		Seams     []seamRow `json:"seams"`
 	}
 	if err := l.getJSON(ctx, "/internal/subscriptions", &list); err != nil {
 		l.subs.Store(&subscriptions{})
@@ -238,6 +243,9 @@ func (l *Link) Refresh(ctx context.Context) {
 	}
 	for _, p := range list.Pipelines {
 		s.pipelines[p] = struct{}{}
+	}
+	if hello.Capabilities[seamCapability] == seamVersion {
+		s.seams = list.Seams
 	}
 	l.subs.Store(s)
 	l.lastOK.Store(time.Now().Unix())
