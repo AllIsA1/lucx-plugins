@@ -9,7 +9,7 @@
   "pages": {
     "inbounds": {
       "form": {
-        "openfluxNote": "OpenFlux exit. One link, one active client. New user = new inbound (own port and carrier URL). Direct uses this inbound port. Paste Yandex, Volga, Board, Telemost, Mail.ru, Cups or Avito URLs for extra carriers; several links of one carrier form a group. Upload the binary on Settings → Cores.",
+        "openfluxNote": "OpenFlux exit. One link, one active client. New user = new inbound (own port and carrier URL). Direct uses this inbound port. Paste Yandex, Volga, Board, Telemost, Mail.ru, Cups or Avito URLs for extra carriers; several links of one carrier form a group. Volga, Board, Telemost, Avito and l3 need OpenFlux v0.13 or newer: the Better OpenFlux plugin installs it. Upload the binary on Settings → Cores.",
         "openfluxVolgaUrl": "Yandex Volga URL",
         "openfluxBoardUrl": "Yandex Board URL",
         "openfluxAvitoUrl": "Avito URL",
