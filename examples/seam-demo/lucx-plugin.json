@@ -1,0 +1,18 @@
+{
+  "id": "seam-demo",
+  "name": "Seam Demo",
+  "version": "1.0.0",
+  "apiVersion": "1",
+  "description": "Example of a seam plugin: adds a comment line to every subscription, a header to the server status answer, and answers /server/status?teapot=1 itself. Disable the plugin and the panel does what it always did, no restart needed.",
+  "author": "LucX-UI",
+  "license": "MIT",
+  "type": "process",
+  "scope": "both",
+  "run": { "command": "bin/${arch}/seamdemo" },
+  "permissions": ["seam:sub", "seam:api:server"],
+  "seams": [
+    { "engine": "sub", "mode": "after", "methods": ["GET"], "route": "/links/:subid" },
+    { "engine": "api", "mode": "before", "methods": ["GET"], "route": "/server/status" },
+    { "engine": "api", "mode": "after", "methods": ["GET"], "route": "/server/status" }
+  ]
+}

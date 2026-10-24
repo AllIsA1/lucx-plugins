@@ -11,7 +11,7 @@ hands it panel events. So: a plugin keeps running when the panel restarts and wh
 address in `$LUCX_PANEL_URL` is the service's loopback gateway (default `127.0.0.1:19480`), which forwards the calls the plugin
 has permission for to the panel; and this document says "the panel" where the operator sees the panel and the Plugins page.
 
-`examples/hello-plugin` is a complete, working plugin (requests, panel API, events, a page that calls its own backend); `examples/block-ads-plugin` shows a pipeline plugin; `examples/ui-hello` is a page-only plugin with no process. Copy one to start. It is MIT-licensed (see its `LICENSE`), so you may use and relicense it freely; your plugin's own license is your choice.
+`examples/hello-plugin` is a complete, working plugin (requests, panel API, events, a page that calls its own backend); `examples/block-ads-plugin` shows a pipeline plugin; `examples/seam-demo` shows seams (changing how the panel answers requests); `examples/ui-hello` is a page-only plugin with no process. Copy one to start. It is MIT-licensed (see its `LICENSE`), so you may use and relicense it freely; your plugin's own license is your choice.
 
 ## Layout
 
@@ -48,6 +48,7 @@ The panel does not compile anything. Build the binaries yourself (`make build` i
 | `type` | `process` (runs code), `hook` (runs code, no pages), `ui` (pages only) |
 | `scope` | `master` (default), `node`, `both`. A plugin installed on a panel runs there when its scope is `master` or `both`; one a master panel pushes to a node runs on the node when its scope is `node` or `both`. A `master` plugin is never pushed to a node |
 | `run.command` | relative path inside the repository. `${arch}` becomes `amd64` or `arm64`; `${socket}` and `${data}` are the socket and data paths |
+| `seams` | optional list of places where the plugin takes part in a request (see *Seams*); needs `type: process` |
 | `hooks.install`, `hooks.uninstall` | optional endpoints under `/_lucx/` the panel calls (see Hooks) |
 | `permissions` | see below |
 
@@ -61,6 +62,7 @@ The operator sees every permission before installing. Dangerous ones are marked 
 | `api:<resource>:write` | change routes for the same resources. Write does not include read | always |
 | `events:<name>` | receive a panel event, e.g. `events:client.created` (see *Events*) | no |
 | `pipeline:xray.config` | patch the generated Xray configuration (see *Pipelines*) | always |
+| `seam:api:<group>`, `seam:api:*`, `seam:sub` | take part in how the panel answers requests of one API route group (`clients`, `inbounds`, `server`, …), of all of them, or of the subscription server (see *Seams*) | always |
 | `network` | reach the internet. Without it the plugin can only talk to the panel on this machine | always |
 | `ui:menu`, `ui:replace:<route>` | sidebar entries, replacing a built-in page (see *Interface pages*) | `replace` |
 
@@ -173,6 +175,88 @@ returns an invalid patch or one that is refused is skipped for that run (the con
 installed) and the problem shows on the Plugins page. Answers are cached for 30 seconds per identical document, and
 the panel calls you on every generation, so **your handler must be idempotent**: a document that already contains
 your change must produce no operations. `examples/block-ads-plugin` does exactly this.
+
+## Seams
+
+A seam lets a plugin change what the panel does with an HTTP request, without touching panel files and without a
+restart. The panel and the subscription server call the plugin system at the moment of the request; the system asks
+the plugins that declared a seam for that route and applies their answers. **Switching a plugin on or off takes effect
+within a second**, and whenever a plugin is off, slow, crashed or answers wrongly the panel does what it always did.
+
+```json
+"permissions": ["seam:sub", "seam:api:server"],
+"seams": [
+  { "engine": "sub", "mode": "after", "methods": ["GET"], "route": "/links/:subid" },
+  { "engine": "api", "mode": "before", "route": "/server/status" }
+]
+```
+
+| Field | Meaning |
+|---|---|
+| `engine` | `api` (the panel API, routes below `/panel/api`) or `sub` (the subscription server) |
+| `mode` | `before`: look at or change the request, or answer it yourself; `replace`: answer instead of the panel (one plugin per route, may hand back with `fallback`); `after`: change the panel's answer |
+| `methods` | optional list (`GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`); empty means all. `HEAD` counts as `GET` unless listed |
+| `route` | an exact route pattern as the panel registers it (`/clients/get/:email`), `<group>/*` for everything below the first path segment, or `*` for every route (not allowed for `replace`) |
+
+**Subscription routes** are named by kind, because the real paths are the operator's settings: `/links/:subid`,
+`/links/:subid/hwid-status`, `/json/:subid`, `/clash/:subid`, `/mihomo/:subid`, `/clash-legacy/:subid`, `/awg/:subid`.
+
+**Permissions.** `seam:api:<group>` for routes in that group (the first path segment of `route`), `seam:api:*` for
+`*`, `seam:sub` for every subscription seam. All are dangerous: a plugin with a seam sees (and can change) what
+the operator's clients and the panel's pages exchange. A seam without its permission is ignored. At most 64 seams
+per plugin; only `type: process` plugins can declare them.
+
+**Never reachable**, whatever the permission (they are skipped even by `*`): everything under `/setting/`,
+`/plugins/` and `/lucx/` (panel settings, API tokens, the plugin system itself), `/server/importDB`, `/server/getDb`,
+`/server/updatePanel`, `/server/getMigration`, `/nodes/mtls/*`, `/nodes/updatePanel`, `/backuptotgbot`. Logging in,
+logging out, the CSRF token and two-factor checks are not under `/panel/api` at all. A manifest that declares a
+protected route is refused at install.
+
+**Order.** For one request: the `before` seams of every plugin in installation order (the first plugin to answer ends
+the request: the panel's handler and the `after` seams do not run), then the `replace` seam if there is one, then the
+panel's own handler, then the `after` seams in installation order, each seeing the answer the previous one left.
+
+### The calls
+
+The plugin system POSTs to `/_lucx/seam/before`, `/_lucx/seam/replace` or `/_lucx/seam/after` on your plugin:
+
+```json
+{ "seam": {"engine": "sub", "mode": "after", "route": "/links/:subid"},
+  "request": {"method": "GET", "route": "/links/:subid", "path": "/sub/abc", "query": "", "params": {"subid": "abc"},
+              "headers": {"Accept": ["*/*"]}, "body": "<base64>", "user": "admin"},
+  "response": {"status": 200, "headers": {"Content-Type": ["text/plain"]}, "body": "<base64>"} }
+```
+
+`response` is present for `after` only; `user` is the logged-in panel user and only exists on the API. You answer with
+an `action` and, where it applies, only what you change:
+
+| Mode | Actions |
+|---|---|
+| `before` | `continue` with an optional `request` change (`query`, `headers`, `body`), or `respond` with a `response` (`status` 200–599 required, `headers`, `body`) |
+| `replace` | `respond` as above, or `fallback` to let the panel handle the request |
+| `after` | `keep`, or `modify` with a `response` change (`status`, `headers`, `body`) |
+
+In a change a missing field stays as it is, headers are merged, and an empty header list removes the header. `204 No
+Content` means no opinion. In Go, `lucxplugin.go` does the decoding: serve `SeamHandler(fn)` on
+`POST /_lucx/seam/{mode}` and return `Continue`, `Respond`, `Fallback`, `Keep` or `Modify` (see `examples/seam-demo`).
+
+### What the panel guarantees
+
+* **You never see the session.** `Cookie`, `Authorization`, `X-Csrf-Token`, `X-Forwarded-*` and `X-LucX-*` are not
+  passed to you, and you cannot set them. You cannot change the method, route or path of a request.
+* **You cannot weaken the panel's headers.** `Set-Cookie`, `Content-Security-Policy`, `X-Frame-Options`, CORS and other
+  security headers of your answers are refused, and the panel's own survive any change you make. `Content-Length` and
+  `Content-Encoding` belong to the transport and are not shown to you.
+* **Limits.** 300 ms per call; a request body over 1 MiB or an answer over 8 MiB passes the seams untouched; at most
+  32 calls in flight; streams (WebSocket, event streams) never pass through a seam. A reply the panel cannot accept
+  (bad status, forbidden header, too large) is ignored and counted as a failure.
+* **Failures are cheap.** After five failures in a row the plugin is skipped for 30 seconds, then tried once.
+  Calls, errors and skips are counted per plugin (`seamCalls`, `seamErrors`, `seamSkipped` in its status).
+* **No loops.** The plugin system's own calls to the panel (including yours through the gateway) are never offered to
+  seams.
+
+The call is made for every request on a route that has a seam, so keep the handler fast and idempotent. For `after`
+seams the panel has to hold the whole answer in memory; prefer `before` where it is enough.
 
 ## Interface pages
 

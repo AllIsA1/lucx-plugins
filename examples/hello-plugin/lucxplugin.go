@@ -113,6 +113,105 @@ func PipelineHandler(fn func(doc json.RawMessage) ([]PatchOp, error)) http.Handl
 	})
 }
 
+// SeamCall is what the panel asks of a seam: where the call came from and the HTTP request, and for an
+// "after" seam the answer the panel gave. Declare seams in lucx-plugin.json and serve them with SeamHandler.
+type SeamCall struct {
+	Seam struct {
+		Engine string `json:"engine"` // "api" or "sub"
+		Mode   string `json:"mode"`   // "before", "replace" or "after"
+		Route  string `json:"route"`  // the route you declared, e.g. "/server/*"
+	} `json:"seam"`
+	Request  SeamRequest   `json:"request"`
+	Response *SeamResponse `json:"response,omitempty"` // only for "after"
+}
+
+// SeamRequest is the request the panel is handling. The method, route and path are the panel's and cannot
+// be changed; you may change the query, the body and the headers the panel lets through (never Cookie,
+// Authorization or the CSRF token: you do not see those either).
+type SeamRequest struct {
+	Method  string              `json:"method"`
+	Route   string              `json:"route"`
+	Path    string              `json:"path"`
+	Query   string              `json:"query"`
+	Params  map[string]string   `json:"params,omitempty"`
+	Headers map[string][]string `json:"headers,omitempty"`
+	Body    []byte              `json:"body,omitempty"`
+	User    string              `json:"user,omitempty"` // the logged-in panel user (API only)
+}
+
+// SeamResponse is an answer: the panel's (in "after") or the one you produce.
+type SeamResponse struct {
+	Status  int                 `json:"status"`
+	Headers map[string][]string `json:"headers,omitempty"`
+	Body    []byte              `json:"body,omitempty"`
+}
+
+// SeamReply is your answer to a seam. Build it with Continue, Respond, Fallback, Keep or Modify.
+type SeamReply struct {
+	Action   string          `json:"action"`
+	Request  *RequestChange  `json:"request,omitempty"`
+	Response *ResponseChange `json:"response,omitempty"`
+}
+
+// RequestChange lists only what you change in a request. A nil field stays as it is; in Headers an empty
+// list removes the header.
+type RequestChange struct {
+	Query   *string             `json:"query,omitempty"`
+	Headers map[string][]string `json:"headers,omitempty"`
+	Body    *[]byte             `json:"body,omitempty"`
+}
+
+// ResponseChange lists only what you change in an answer.
+type ResponseChange struct {
+	Status  *int                `json:"status,omitempty"`
+	Headers map[string][]string `json:"headers,omitempty"`
+	Body    *[]byte             `json:"body,omitempty"`
+}
+
+// Continue lets the panel carry on with the request, changed as given (nil: unchanged). "before" only.
+func Continue(change *RequestChange) SeamReply { return SeamReply{Action: "continue", Request: change} }
+
+// Respond answers the request instead of the panel ("before" and "replace"). The status must be 200-599.
+func Respond(status int, headers map[string][]string, body []byte) SeamReply {
+	return SeamReply{Action: "respond", Response: &ResponseChange{Status: &status, Headers: headers, Body: &body}}
+}
+
+// Fallback hands a "replace" seam back to the panel's own code.
+func Fallback() SeamReply { return SeamReply{Action: "fallback"} }
+
+// Keep leaves the panel's answer as it is ("after" only).
+func Keep() SeamReply { return SeamReply{Action: "keep"} }
+
+// Modify changes the panel's answer ("after" only).
+func Modify(change ResponseChange) SeamReply { return SeamReply{Action: "modify", Response: &change} }
+
+// Str and Bytes make the pointers the change types use.
+func Str(s string) *string { return &s }
+
+// Bytes returns a pointer to b for RequestChange.Body and ResponseChange.Body.
+func Bytes(b []byte) *[]byte { return &b }
+
+// SeamHandler serves POST /_lucx/seam/{before|replace|after}. Answer within a few hundred milliseconds:
+// the panel waits at most that long and then runs its own code as if you were not there. An error or an
+// invalid reply is treated the same way, and a plugin that keeps failing is skipped
+// for a while.
+func SeamHandler(fn func(SeamCall) (SeamReply, error)) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var call SeamCall
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<20)).Decode(&call); err != nil {
+			http.Error(w, "bad seam call", http.StatusBadRequest)
+			return
+		}
+		reply, err := fn(call)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(reply)
+	})
+}
+
 // RequestUser is the panel user on whose behalf the request was made. The
 // panel sets it itself; clients cannot forge it.
 func RequestUser(r *http.Request) string { return r.Header.Get("X-LucX-User") }
