@@ -46,6 +46,9 @@ type OpenfluxConfig struct {
 	AvitoURL    string `json:"avitoUrl"`
 	TelemostURL string `json:"telemostUrl"`
 	ExitMode    string `json:"exitMode"`
+	// DebugLevel is 0 (the usual log) or 2 (the core's -dd: sessions, carriers, handshakes and errors, no
+	// per-packet lines). It is what shows whether a client reaches the exit at all.
+	DebugLevel int `json:"debugLevel"`
 }
 
 const (
@@ -96,6 +99,11 @@ func (c OpenfluxConfig) Merge() OpenfluxConfig {
 	c.ExitMode = strings.ToLower(strings.TrimSpace(c.ExitMode))
 	if c.ExitMode == "" {
 		c.ExitMode = OpenfluxModeL4
+	}
+	if c.DebugLevel > 0 {
+		c.DebugLevel = 2
+	} else {
+		c.DebugLevel = 0
 	}
 	return c
 }
@@ -195,6 +203,9 @@ func (c OpenfluxConfig) RenderConf(key string, port int) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "[Interface]\nRole = exit\nMode = %s\nCodec = batched\nEncryptionKeyFile = %s\nURL = %s\nCookieStore = %s\n",
 		c.exitMode(), secretPath, c.contextURL(), cookiePath)
+	if c.DebugLevel > 0 {
+		fmt.Fprintf(&b, "Debug = %d\n", c.DebugLevel)
+	}
 	fmt.Fprintf(&b, "\n[Transport \"direct\"]\nType = direct\nPriority = 100\nListen = %s\n", c.listenAddr(port))
 	for _, car := range openfluxCarriers {
 		if raw := car.url(c); raw != "" {

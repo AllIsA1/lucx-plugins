@@ -324,6 +324,7 @@ export function createDefaultOpenfluxInboundSettings(): OpenfluxInboundSettings 
     avitoUrl: '',
     telemostUrl: '',
     exitMode: 'l4',
+    debugLevel: 0,
   };
 }
 

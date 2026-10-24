@@ -66,6 +66,18 @@ export default function OpenfluxFields() {
           ]}
         />
       </FormField>
+      <FormField
+        name={['settings', 'debugLevel']}
+        label={t('pages.inbounds.form.openfluxDebug')}
+        tooltip={t('pages.inbounds.form.openfluxDebugHint')}
+      >
+        <Select
+          options={[
+            { value: 0, label: t('pages.inbounds.form.openfluxDebugOff') },
+            { value: 2, label: t('pages.inbounds.form.openfluxDebugOn') },
+          ]}
+        />
+      </FormField>
       {CARRIER_FIELDS.map((f) => (
         <FormField
           key={f.name}

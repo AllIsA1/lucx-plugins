@@ -17,5 +17,6 @@ export const OpenfluxInboundSettingsSchema = z.object({
   avitoUrl: z.string().default(''),
   telemostUrl: z.string().default(''),
   exitMode: z.enum(['l4', 'l3']).default('l4'),
+  debugLevel: z.number().int().default(0),
 });
 export type OpenfluxInboundSettings = z.infer<typeof OpenfluxInboundSettingsSchema>;

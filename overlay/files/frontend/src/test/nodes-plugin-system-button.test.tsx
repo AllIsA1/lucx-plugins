@@ -16,12 +16,21 @@ import { renderWithProviders } from './test-utils';
 
 vi.mock('@/api/plugins', () => ({ pluginsApi: { nodes: vi.fn() } }));
 
+const report0 = (over: { available: boolean; allowMasterManagement: boolean }) => ({
+  ...over,
+  processesAvailable: true,
+  processesError: '',
+  safeMode: false,
+  error: '',
+  plugins: [],
+});
+
 const status = (over: Partial<NodePluginStatus>): NodePluginStatus => ({
   nodeId: 1,
   nodeName: 'pl-warsaw',
   state: 'ok',
   fetchedAt: 0,
-  plugins: { available: true, allowMasterManagement: true, plugins: [] },
+  plugins: report0({ available: true, allowMasterManagement: true }),
   ...over,
 });
 
@@ -37,7 +46,7 @@ describe('pluginSystemStep', () => {
     expect(pluginSystemStep(status({ state: 'locked' }))).toBe('allow');
     expect(pluginSystemStep(status({ state: 'ok' }))).toBe('ready');
     expect(
-      pluginSystemStep(status({ plugins: { available: true, allowMasterManagement: false, plugins: [] } })),
+      pluginSystemStep(status({ plugins: report0({ available: true, allowMasterManagement: false }) })),
     ).toBe('allow');
     expect(pluginSystemStep(status({ state: 'pending' }))).toBe('wait');
     expect(pluginSystemStep(status({ state: 'offline' }))).toBe('failed');

@@ -18,7 +18,11 @@
         "openfluxExitMode": "Exit mode",
         "openfluxExitModeHint": "l4 works everywhere and needs no extra rules. l3 forwards raw packets (faster, Linux root only): the panel adds an iptables rule that drops the RSTs the server itself sends from its address, so its closed ports look filtered. Chosen on creation; changing it restarts the exit.",
         "openfluxModeL4": "l4 (default)",
-        "openfluxModeL3": "l3 (faster, root, iptables rule)"
+        "openfluxModeL3": "l3 (faster, root, iptables rule)",
+        "openfluxDebug": "Exit log",
+        "openfluxDebugHint": "Detailed: the exit also logs sessions, carriers, handshakes and errors, so a client that cannot connect shows up in the panel log (Settings → Cores → OpenFlux, or the service journal). Changing it restarts the exit.",
+        "openfluxDebugOff": "Usual",
+        "openfluxDebugOn": "Detailed (sessions and errors)"
       }
     },
     "plugins": {

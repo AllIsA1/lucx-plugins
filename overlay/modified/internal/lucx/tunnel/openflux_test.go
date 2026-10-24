@@ -305,3 +305,29 @@ func TestOpenfluxL3WithoutAHostAddressInstallsNothing(t *testing.T) {
 		t.Errorf("calls = %v", f.calls)
 	}
 }
+
+func TestOpenfluxDebugLevelIsOffByDefaultAndMakesTheCoreLogSessions(t *testing.T) {
+	plain := OpenfluxConfig{Secret: "0123456789abcdef"}.Merge()
+	if strings.Contains(plain.RenderConf("openflux-1", 18445), "Debug") {
+		t.Error("an exit that was not asked for debug output must log as before")
+	}
+	for _, level := range []int{1, 2, 3} {
+		cfg := OpenfluxConfig{Secret: "0123456789abcdef", DebugLevel: level}.Merge()
+		conf := cfg.RenderConf("openflux-1", 18445)
+		if cfg.DebugLevel != 2 || !strings.Contains(conf, "\nDebug = 2\n") {
+			t.Errorf("level %d: %d, conf:\n%s", level, cfg.DebugLevel, conf)
+		}
+		if strings.Index(conf, "Debug = 2") > strings.Index(conf, "[Transport") {
+			t.Error("Debug belongs to [Interface], before the transports")
+		}
+	}
+	if (OpenfluxConfig{DebugLevel: -4}).Merge().DebugLevel != 0 {
+		t.Error("a negative level must mean off")
+	}
+	// a restart is the way a changed level takes effect: it changes the conf, so the fingerprint
+	a := OpenfluxConfig{Secret: "0123456789abcdef"}.Merge().RenderConf("openflux-1", 18445)
+	b := OpenfluxConfig{Secret: "0123456789abcdef", DebugLevel: 2}.Merge().RenderConf("openflux-1", 18445)
+	if a == b {
+		t.Error("the conf did not change with the level")
+	}
+}
