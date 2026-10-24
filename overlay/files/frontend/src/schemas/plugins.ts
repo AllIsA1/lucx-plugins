@@ -15,6 +15,13 @@ export const PluginSourceSchema = z.object({
   ref: z.string().optional(),
 });
 
+export const PluginSeamSchema = z.object({
+  engine: z.string(),
+  mode: z.string(),
+  route: z.string(),
+  methods: z.array(z.string()).nullish(),
+});
+
 export const PluginRuntimeSchema = z.object({
   state: z.enum(['stopped', 'starting', 'running', 'stopping', 'failed']),
   healthy: z.boolean(),
@@ -26,6 +33,9 @@ export const PluginRuntimeSchema = z.object({
   eventsFailed: z.number().optional(),
   eventsDropped: z.number().optional(),
   pipelineErrors: z.number().optional(),
+  seamCalls: z.number().optional(),
+  seamErrors: z.number().optional(),
+  seamSkipped: z.number().optional(),
   lastError: z.string().optional(),
 });
 
@@ -47,6 +57,7 @@ export const PluginEntrySchema = z.object({
   managedByMaster: z.boolean().optional(),
   installedAt: z.string(),
   permissions: stringList,
+  seams: z.array(PluginSeamSchema).nullish(),
   runtime: PluginRuntimeSchema.nullish(),
   previous: PluginPreviousSchema.nullish(),
 });
@@ -86,6 +97,7 @@ export const PluginManifestSchema = z.object({
   type: z.string(),
   scope: z.string(),
   permissions: stringList,
+  seams: z.array(PluginSeamSchema).nullish(),
 });
 
 export const UpdatePreviewSchema = z.object({
@@ -206,6 +218,7 @@ export const PluginUiSchema = z.object({
 
 export const PluginFrameTokenSchema = z.object({ token: z.string(), expiresAt: z.string() });
 
+export type PluginSeam = z.infer<typeof PluginSeamSchema>;
 export type PluginRuntime = z.infer<typeof PluginRuntimeSchema>;
 export type PluginEntry = z.infer<typeof PluginEntrySchema>;
 export type PluginsState = z.infer<typeof PluginsStateSchema>;

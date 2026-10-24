@@ -37,7 +37,8 @@
         "pipeline": "Can alter data the panel produces (for example Xray config or subscription links).",
         "uiMenu": "Adds entries to the sidebar menu.",
         "uiReplace": "Replaces a built-in panel page.",
-        "unknown": "Unknown permission."
+        "unknown": "Unknown permission.",
+        "seam": "Can take part in how the panel answers requests, and see or change them (including what clients receive)."
       },
       "type": {
         "ui": "Interface",
@@ -199,6 +200,23 @@
         "updated": "The plugin system was updated to {version}",
         "rolledBack": "{version} did not start properly and was rolled back to the previous release.",
         "timeout": "The plugin system did not come back in time. Check the service on the server."
+      },
+      "seamsTitle": "Takes part in these requests",
+      "seamsSummary": "Seams: {calls} calls, {failed} failed, {skipped} skipped",
+      "seamAllMethods": "all methods",
+      "seamMode": {
+        "before": "before",
+        "replace": "replace",
+        "after": "after"
+      },
+      "seamModeHint": {
+        "before": "Looks at or changes the request before the panel handles it, or answers it itself.",
+        "replace": "Answers instead of the panel.",
+        "after": "Changes the answer the panel gave."
+      },
+      "seamEngine": {
+        "api": "API",
+        "sub": "Subscription"
       }
     }
   }

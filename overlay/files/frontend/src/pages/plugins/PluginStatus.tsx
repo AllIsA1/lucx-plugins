@@ -4,9 +4,12 @@
 import { useTranslation } from 'react-i18next';
 import { Space, Tag, Tooltip, Typography } from 'antd';
 
+import SeamList from '@/pages/plugins/SeamList';
+import { activeSeams } from '@/pages/plugins/permissions';
 import type { PluginEntry } from '@/schemas/plugins';
 
-type StatusSubject = Pick<PluginEntry, 'type' | 'enabled' | 'disabledReason' | 'runtime'>;
+type StatusSubject = Pick<PluginEntry, 'type' | 'enabled' | 'disabledReason' | 'runtime'> &
+  Partial<Pick<PluginEntry, 'permissions' | 'seams'>>;
 
 function tagColor(state: string, healthy: boolean): string {
   if (state === 'running') return healthy ? 'green' : 'orange';
@@ -39,6 +42,16 @@ export default function PluginStatus({ plugin }: { plugin: StatusSubject }) {
             sent: runtime.eventsSent ?? 0,
             failed: runtime.eventsFailed ?? 0,
             dropped: runtime.eventsDropped ?? 0,
+          })}
+        </Typography.Text>
+      ) : null}
+      <SeamList seams={activeSeams(plugin)} />
+      {runtime && (runtime.seamCalls || runtime.seamErrors || runtime.seamSkipped) ? (
+        <Typography.Text type="secondary">
+          {t('pages.plugins.seamsSummary', {
+            calls: runtime.seamCalls ?? 0,
+            failed: runtime.seamErrors ?? 0,
+            skipped: runtime.seamSkipped ?? 0,
           })}
         </Typography.Text>
       ) : null}

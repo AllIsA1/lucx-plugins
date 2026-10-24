@@ -8,7 +8,8 @@ import { Alert, Button, Checkbox, Descriptions, Modal, Space, Typography } from 
 import { pluginsApi, type PluginPreview } from '@/api/plugins';
 import type { Isolation } from '@/schemas/plugins';
 import PermissionList from '@/pages/plugins/PermissionList';
-import { shortCommit, sourceUrl } from '@/pages/plugins/permissions';
+import SeamList from '@/pages/plugins/SeamList';
+import { activeSeams, shortCommit, sourceUrl } from '@/pages/plugins/permissions';
 
 interface Props {
   preview: PluginPreview;
@@ -119,6 +120,14 @@ export default function PluginPreviewModal({ preview, isolation, onClose, onInst
         {t('pages.plugins.permissions')}
       </Typography.Title>
       <PermissionList permissions={manifest.permissions} />
+      {activeSeams(manifest).length > 0 && (
+        <>
+          <Typography.Title level={5} style={{ marginTop: 16 }}>
+            {t('pages.plugins.seamsTitle')}
+          </Typography.Title>
+          <SeamList seams={activeSeams(manifest)} />
+        </>
+      )}
       {preview.dangerous.length > 0 && (
         <Alert
           type="error"
