@@ -49,8 +49,9 @@ commit is a new `add`.
 
 ### Entries that follow the repository (`-track`)
 
-`add -track` (instead of `-commit`) writes an entry that vouches for the repository, not for one commit: it has no `commit` and
-no `manifestSha256`, and sets `"track": true`. The panel installs such a plugin from the repository's default branch and offers
+`add -track` (instead of `-commit`) writes an entry that vouches for the repository, not for one commit: it sets `"track": true` and may leave out `commit` and
+`manifestSha256`. Keep them (`add -track -commit <sha>`) while panels older than host-3 are around: they ignore `track` and
+install that reviewed commit, newer ones follow the repository. The panel installs such a plugin from the repository's default branch and offers
 every newer version as an update, without a new signed entry for each release. What stays checked: the plugin id must be the
 listed one, and an update that asks for more permissions, or changes the type or scope, is shown and needs the operator's
 confirmation, as for every update. What is given up: the signature no longer says that this exact code was reviewed. Use it for

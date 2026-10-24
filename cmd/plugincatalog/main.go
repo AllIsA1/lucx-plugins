@@ -174,15 +174,15 @@ func add(args []string) error {
 	fs := newFlags("add")
 	index := fs.String("index", "", "index.json to create or update")
 	repo := fs.String("repo", "", "https://github.com/<owner>/<repo>")
-	commit := fs.String("commit", "", "full commit SHA that was reviewed (not with -track)")
+	commit := fs.String("commit", "", "full commit SHA that was reviewed (with -track it is the last reviewed one, which a panel without -track support still installs)")
 	track := fs.Bool("track", false, "vouch for the repository, not a commit: installs and updates follow its default branch")
 	dir := fs.String("dir", "", "the plugin checked out at that commit")
 	summary := fs.String("summary", "", "one line shown on the card")
 	by := fs.String("verified-by", "", "who reviewed it")
 	at := fs.String("verified-at", "", "review date, YYYY-MM-DD (default today)")
 	notes := fs.String("notes", "", "short review note")
-	if err := fs.Parse(args); err != nil || *index == "" || *repo == "" || (*commit != "") == *track || *dir == "" {
-		return errors.New("add needs -index, -repo, -dir and either -commit or -track")
+	if err := fs.Parse(args); err != nil || *index == "" || *repo == "" || (*commit == "" && !*track) || *dir == "" {
+		return errors.New("add needs -index, -repo, -dir and -commit or -track")
 	}
 	rawManifest, err := os.ReadFile(filepath.Join(*dir, plugins.ManifestFile))
 	if err != nil {
@@ -198,8 +198,8 @@ func add(args []string) error {
 		ManifestSHA256: hex.EncodeToString(sum[:]), Type: m.Type, Scope: m.Scope, License: m.License, Author: m.Author,
 		Permissions: normalized(m.Permissions),
 	}
-	if *track {
-		entry.ManifestSHA256 = "" // the manifest changes with every version
+	if *track && *commit == "" {
+		entry.ManifestSHA256 = "" // nothing is pinned: the manifest changes with every version
 	}
 	if entry.Summary == "" {
 		entry.Summary = truncate(m.Description, 300)

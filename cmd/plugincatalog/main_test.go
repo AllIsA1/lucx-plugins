@@ -202,7 +202,13 @@ func TestAddTrackWritesAnEntryWithoutACommit(t *testing.T) {
 	if err != nil || len(idx.Plugins) != 1 || !idx.Plugins[0].Track || idx.Plugins[0].Commit != "" || idx.Plugins[0].ManifestSHA256 != "" {
 		t.Fatalf("index = %+v, %v", idx, err)
 	}
-	if code, _, _ := run3(t, "add", "-index", index, "-repo", "https://github.com/acme/block-ads", "-track", "-commit", sha1c, "-dir", plugin); code == 0 {
-		t.Error("-track together with -commit must be refused")
+	// With a commit the entry still pins it for panels that do not know -track.
+	if code, _, errOut := run3(t, "add", "-index", index, "-repo", "https://github.com/acme/block-ads", "-track", "-commit", sha1c, "-dir", plugin); code != 0 {
+		t.Fatalf("add -track -commit = %d %s", code, errOut)
+	}
+	raw, _ = os.ReadFile(index)
+	idx, err = plugins.ParseCatalogIndex(raw)
+	if err != nil || !idx.Plugins[0].Track || idx.Plugins[0].Commit != sha1c || idx.Plugins[0].ManifestSHA256 == "" {
+		t.Fatalf("index = %+v, %v", idx, err)
 	}
 }

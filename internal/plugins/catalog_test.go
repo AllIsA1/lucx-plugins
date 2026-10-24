@@ -146,9 +146,9 @@ func TestParseCatalogIndexRefusesWhatCouldMislead(t *testing.T) {
 		name   string
 		mutate func(map[string]any)
 	}{
-		{"tracking entry with a commit", func(i map[string]any) {
+		{"tracking entry with a bad commit", func(i map[string]any) {
 			e := goodCatalogEntry("block-ads")
-			e["track"] = true
+			e["track"], e["commit"] = true, "main"
 			i["plugins"] = []any{e}
 		}},
 		{"newer schema", func(i map[string]any) { i["schema"] = 2 }},

@@ -165,13 +165,11 @@ func (e *CatalogEntry) validate() error {
 		return fmt.Errorf("invalid repo: %w", err)
 	case src.Ref != "":
 		return errors.New("repo must be the repository link without a branch or tag; the commit pins the version (or set track)")
-	case e.Track && (e.Commit != "" || e.ManifestSHA256 != ""):
-		return errors.New("a tracking entry names the repository only: no commit and no manifestSha256")
-	case !e.Track && !shaPattern.MatchString(e.Commit):
+	case e.Commit != "" && !shaPattern.MatchString(e.Commit), !e.Track && e.Commit == "":
 		return errors.New("commit must be a full lowercase SHA")
 	case !versionPattern.MatchString(e.Version):
 		return errors.New("invalid version")
-	case !e.Track && !manifestHashPattern.MatchString(e.ManifestSHA256):
+	case (!e.Track || e.ManifestSHA256 != "") && !manifestHashPattern.MatchString(e.ManifestSHA256):
 		return errors.New("manifestSha256 must be 64 lowercase hex characters")
 	case e.Type != TypeUI && e.Type != TypeProcess && e.Type != TypeHook:
 		return errors.New("invalid type")
