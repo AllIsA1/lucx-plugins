@@ -172,6 +172,7 @@ func (a *Agent) AtStart(ctx context.Context) error {
 	st := a.Status()
 	st.CheckedAt = time.Now().UTC()
 	defer func() { _ = a.saveState(st) }()
+	defer func() { a.syncSidecars(ctx, &st, true) }() // runs before the state is saved
 
 	idx := a.refresh(ctx, &st)
 	if idx == nil {
@@ -211,6 +212,14 @@ func (a *Agent) Check(ctx context.Context) error {
 	st := a.Status()
 	st.CheckedAt = time.Now().UTC()
 	defer func() { _ = a.saveState(st) }()
+	defer func() { // has the helper programs ready; a start installs them
+		if waiting := a.syncSidecars(ctx, &st, false); len(waiting) > 0 {
+			st.Pending = true
+			if st.PendingRelease == "" {
+				st.PendingRelease = strings.Join(waiting, ", ")
+			}
+		}
+	}()
 	idx := a.refresh(ctx, &st)
 	if idx == nil {
 		return nil
@@ -254,9 +263,13 @@ func (a *Agent) Restore(ctx context.Context) (bool, error) {
 	}
 	defer unlock()
 	st := a.Status()
+	sidecars := a.restoreSidecars(&st)
+	if sidecars {
+		defer func() { _ = a.saveState(st) }()
+	}
 	h, err := fileSha(a.cfg.PanelBinary)
 	if err != nil {
-		return false, err
+		return sidecars, err
 	}
 	idx, _ := a.cachedIndex()
 	var b *builds.Build
@@ -272,7 +285,7 @@ func (a *Agent) Restore(ctx context.Context) (bool, error) {
 	case st.Ours != "" && st.Ours == h:
 		origSha = st.Original
 	default:
-		return false, nil
+		return sidecars, nil
 	}
 	src := a.originalPath(origSha)
 	if got, err := fileSha(src); err != nil || got != origSha {

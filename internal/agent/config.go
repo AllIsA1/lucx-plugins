@@ -31,6 +31,11 @@ type Config struct {
 	StateDir    string // /var/lib/lucx-plugins
 	Arch        string // amd64 or arm64
 	IndexURL    string
+	// SidecarsURL is where the signed list of helper programs is published; BinDir is where the panel keeps
+	// them (default: bin next to the panel binary); NoSidecars leaves them alone altogether.
+	SidecarsURL string
+	BinDir      string
+	NoSidecars  bool
 	Keys        []ed25519.PublicKey
 	Client      *http.Client
 	// Budget bounds AtStart as a whole so a slow network can never hold up the panel's start.

@@ -32,6 +32,8 @@ jobs:
         run: tests/installer_test.sh
       - name: Host release script tests
         run: tests/host_test.sh
+      - name: Sidecar scripts
+        run: tests/sidecar_test.sh
       - name: Overlay tests against the release the overlay was made from
         run: tests/run.sh
 

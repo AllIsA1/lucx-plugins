@@ -75,7 +75,7 @@ Running `install.sh` again does the same and also refreshes the program itself. 
 
 `lucx-plugins-sync status` says what it did to the panel binary and the last problem it met; `systemctl status
 lucx-plugins-host` and `journalctl -u lucx-plugins-host` say how the service is doing. `/etc/lucx-plugins/config` (`PANEL_BINARY`,
-`SERVICE`, `STATE_DIR`, `RESTART_AT`, `INDEX_URL`) and `/etc/lucx-plugins/host.env` (`LUCX_HOST_GATEWAY`) are created once and then
+`SERVICE`, `STATE_DIR`, `RESTART_AT`, `INDEX_URL`, and for the helper programs `SIDECARS` (`on`/`off`), `BIN_DIR`, `SIDECARS_URL`) and `/etc/lucx-plugins/host.env` (`LUCX_HOST_GATEWAY`) are created once and then
 left alone; `LUCX_PLUGINS_INDEX_URL` or `INDEX_URL` points the program at a mirror of the signed list. Plugins installed with the
 earlier, built-in version of the plugin system are not migrated: install them again from the Plugins page.
 
@@ -87,6 +87,11 @@ earlier, built-in version of the plugin system are not migrated: install them ag
 - The service binary comes only from `host.json`, signed by the same keys under a different domain (a signature of one list is
   never valid for the other), whose `sequence` only grows and whose releases are never rewritten. The hash is checked and the
   binary must print the version the list names before it is installed or replaces the running one.
+- Helper programs of the panel (the OpenFlux exit) come only from `sidecars.json`, signed by the same keys under a third domain,
+  with the same rules: the `sequence` only grows, the file's hash and an executable header are checked before it replaces
+  `<panel dir>/bin/<name>-linux-<arch>`, and the file it replaced is kept as `<name>-linux-<arch>.orig` (`lucx-plugins-sync
+  restore` puts it back, unless you have put another file there since). `SIDECARS=off` in `/etc/lucx-plugins/config` leaves them
+  alone. The timer has the file ready; the next panel start installs it, and `lucx-plugins update` restarts for it.
 - The lists only ever grow: an older, validly signed list is ignored. The last good `builds.json` is cached, so the check keeps
   working offline.
 - `install.sh` and `lucx-plugins-sync` are downloaded over HTTPS from this repository, the same trust the panel's own installer has
@@ -146,6 +151,14 @@ workflow with `publish` on (it also needs `PUBLISH_ENABLED=true` and the `BUILDS
 `amd64` and `arm64` binaries named `host-N` (`scripts/build-host.sh`), creates the release `host-N` and records it in the signed
 `host.json` on the `builds` branch (`scripts/host-list.sh`, which touches the branch only after the signature verifies against
 `keys/builds.pub`). Servers update to it from the Plugins page; a release is never changed afterwards.
+
+## Releases of the helper programs
+
+`.github/workflows/sidecars.yml` builds a helper program from a reviewed upstream commit (`scripts/build-sidecar.sh`: the upstream
+tag must point at exactly that commit; static `amd64` and `arm64` binaries), creates the release `sidecar-<name>-<version>-<n>`
+and records it in the signed `sidecars.json` on the `builds` branch (`scripts/sidecar-list.sh`). Run by hand, with `publish` on
+(and `PUBLISH_ENABLED=true`, `BUILDS_SIGNING_KEY`), like the host. The programs are their authors' GPL software, built from
+their source unchanged; see `LICENSING.md`.
 
 ## License
 

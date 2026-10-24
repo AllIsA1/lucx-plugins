@@ -24,6 +24,10 @@ type State struct {
 	// PendingRelease is the build that waits, so a person can be told what the next start brings.
 	PendingRelease string `json:"pendingRelease,omitempty"`
 	LastError      string `json:"lastError"`
+
+	SidecarsSequence int64                   `json:"sidecarsSequence,omitempty"` // highest sidecar list sequence ever accepted
+	Sidecars         map[string]SidecarState `json:"sidecars,omitempty"`         // the helper programs this agent installed
+	SidecarError     string                  `json:"sidecarError,omitempty"`
 }
 
 func (a *Agent) statePath() string { return filepath.Join(a.cfg.StateDir, "state.json") }

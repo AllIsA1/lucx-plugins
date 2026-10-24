@@ -50,6 +50,11 @@ type config struct {
 	Service     string
 	RestartAt   string
 	IndexURL    string
+	// BinDir is where the panel keeps its helper programs (default: bin next to the panel binary),
+	// SidecarsURL the signed list that names newer builds of them, NoSidecars (SIDECARS=off) leaves them alone.
+	BinDir      string
+	SidecarsURL string
+	NoSidecars  bool
 }
 
 func parseConfig(r io.Reader) (config, error) {
@@ -76,6 +81,19 @@ func parseConfig(r io.Reader) (config, error) {
 			cfg.RestartAt = value
 		case "INDEX_URL":
 			cfg.IndexURL = value
+		case "BIN_DIR":
+			cfg.BinDir = value
+		case "SIDECARS_URL":
+			cfg.SidecarsURL = value
+		case "SIDECARS":
+			switch strings.ToLower(value) {
+			case "on":
+				cfg.NoSidecars = false
+			case "off":
+				cfg.NoSidecars = true
+			default:
+				return cfg, fmt.Errorf("line %d: SIDECARS is on or off", n)
+			}
 		default:
 			return cfg, fmt.Errorf("line %d: unknown setting %q", n, strings.TrimSpace(key))
 		}
@@ -87,6 +105,15 @@ func parseConfig(r io.Reader) (config, error) {
 // An empty result means the agent's default (the published list).
 func indexURL(cfg config, flagValue, env string) string {
 	for _, v := range []string{flagValue, env, cfg.IndexURL} {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+func first(values ...string) string {
+	for _, v := range values {
 		if v != "" {
 			return v
 		}
@@ -150,6 +177,9 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		StateDir:    cfg.StateDir,
 		Arch:        runtime.GOARCH,
 		IndexURL:    indexURL(cfg, *indexFlag, os.Getenv("LUCX_PLUGINS_INDEX_URL")),
+		BinDir:      cfg.BinDir,
+		SidecarsURL: first(os.Getenv("LUCX_PLUGINS_SIDECARS_URL"), cfg.SidecarsURL),
+		NoSidecars:  cfg.NoSidecars,
 		Keys:        keyList,
 		Log:         func(format string, v ...any) { fmt.Fprintf(stderr, "lucx-plugins: "+format+"\n", v...) },
 		Restart:     func(ctx context.Context) error { return restartService(ctx, cfg.Service) },
@@ -211,9 +241,17 @@ func update(ctx context.Context, a updater, noRestart bool, cfg config, stdout, 
 		}
 		return release
 	}
+	helpers := strings.Join(res.Sidecars, ", ")
 	switch {
-	case res.Changed:
+	case res.Changed && res.After != res.Before:
 		fmt.Fprintf(stdout, "updated the panel: %s -> %s\n", name(res.Before), res.After)
+		if helpers != "" {
+			fmt.Fprintf(stdout, "updated the helper programs: %s\n", helpers)
+		}
+	case res.Changed:
+		fmt.Fprintf(stdout, "updated the helper programs: %s (the panel was restarted)\n", helpers)
+	case res.Waiting && res.After == res.Before && helpers != "":
+		fmt.Fprintf(stdout, "newer helper programs (%s) are ready; they will be installed at the next panel start (automatic restart around %s, or run this command without --no-restart)\n", helpers, cfg.RestartAt)
 	case res.Waiting:
 		fmt.Fprintf(stdout, "a newer build %s is ready (now: %s); it will be installed at the next panel start (automatic restart around %s, or run this command without --no-restart)\n", res.After, name(res.Before), cfg.RestartAt)
 	default:

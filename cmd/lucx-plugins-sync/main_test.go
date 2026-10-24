@@ -33,11 +33,15 @@ SERVICE="my-panel"
 STATE_DIR = /var/lib/x
 RESTART_AT=05:30
 INDEX_URL=https://mirror.example/builds.json
+BIN_DIR=/opt/x-ui/bin
+SIDECARS_URL=https://mirror.example/sidecars.json
+SIDECARS=off
 `))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.PanelBinary != "/opt/x-ui/x-ui" || cfg.Service != "my-panel" || cfg.StateDir != "/var/lib/x" || cfg.RestartAt != "05:30" || cfg.IndexURL != "https://mirror.example/builds.json" {
+	if cfg.PanelBinary != "/opt/x-ui/x-ui" || cfg.Service != "my-panel" || cfg.StateDir != "/var/lib/x" || cfg.RestartAt != "05:30" || cfg.IndexURL != "https://mirror.example/builds.json" ||
+		cfg.BinDir != "/opt/x-ui/bin" || cfg.SidecarsURL != "https://mirror.example/sidecars.json" || !cfg.NoSidecars {
 		t.Errorf("cfg = %+v", cfg)
 	}
 	for name, doc := range map[string]string{"unknown key": "BOGUS=1\n", "no equals": "PANEL_BINARY\n", "empty value": "SERVICE=\n"} {

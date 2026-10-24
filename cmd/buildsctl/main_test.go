@@ -207,3 +207,57 @@ func TestHostSetNeedsEveryHash(t *testing.T) {
 		t.Error("a document was written for a refused release")
 	}
 }
+
+func TestSidecarSetSignVerifyThroughTheCommandLine(t *testing.T) {
+	dir := t.TempDir()
+	key := filepath.Join(dir, "builds.key")
+	pub := must(t, "keygen", "-out", key)
+	index := filepath.Join(dir, "sidecars.json")
+	h := func(c string) string { return strings.Repeat(c, 64) }
+	commit := strings.Repeat("a", 40)
+	set := func(version, release string, amd, arm string) (string, string, int) {
+		return exec(t, "sidecar-set", "-index", index, "-name", "openflux", "-version", version, "-commit", commit,
+			"-release", release, "-amd64-sha256", h(amd), "-arm64-sha256", h(arm))
+	}
+	if _, errOut, code := set("v0.13.0", "sidecar-openflux-v0.13.0-1", "1", "2"); code != 0 {
+		t.Fatal(errOut)
+	}
+	if _, errOut, code := set("v0.13.1", "sidecar-openflux-v0.13.1-1", "3", "4"); code != 0 {
+		t.Fatal(errOut)
+	}
+	must(t, "sidecar-sign", "-key", key, "-index", index)
+	must(t, "sidecar-verify", "-index", index, "-sig", index+".sig", "-pub", pub)
+
+	raw, _ := os.ReadFile(index)
+	doc, err := builds.ParseSidecars(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s, _ := doc.Find("openflux", "arm64"); s.Version != "v0.13.1" || s.SHA256 != h("4") || doc.Sequence != 2 || doc.GeneratedAt.IsZero() {
+		t.Errorf("document = %+v", doc)
+	}
+	if _, _, code := set("v0.13.0", "sidecar-openflux-v0.13.0-1", "1", "2"); code == 0 {
+		t.Error("going back to an older version was accepted")
+	}
+	// A sidecar signature must not pass for the other documents.
+	if _, _, code := exec(t, "host-verify", "-index", index, "-sig", index+".sig", "-pub", pub); code == 0 {
+		t.Error("a sidecar document verified as a host document")
+	}
+	if err := os.WriteFile(index, append(raw, ' '), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, code := exec(t, "sidecar-verify", "-index", index, "-sig", index+".sig", "-pub", pub); code == 0 {
+		t.Error("a modified sidecar document verified")
+	}
+}
+
+func TestSidecarSetNeedsEveryHash(t *testing.T) {
+	index := filepath.Join(t.TempDir(), "sidecars.json")
+	if _, _, code := exec(t, "sidecar-set", "-index", index, "-name", "openflux", "-version", "v0.13.0", "-commit", strings.Repeat("a", 40),
+		"-release", "sidecar-openflux-v0.13.0-1", "-amd64-sha256", strings.Repeat("1", 64)); code == 0 {
+		t.Error("a release without the arm64 hash was accepted")
+	}
+	if _, err := os.Stat(index); err == nil {
+		t.Error("a document was written for a refused release")
+	}
+}
