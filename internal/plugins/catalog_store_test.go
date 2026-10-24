@@ -522,3 +522,52 @@ func TestACatalogWithoutASignatureFileIsBroken(t *testing.T) {
 		t.Errorf("view = %+v, want an error: an index without its signature is a broken publication", view)
 	}
 }
+
+// trackedEntryFor is a catalog entry that vouches for the repository, not for one commit.
+func trackedEntryFor(t *testing.T) map[string]any {
+	t.Helper()
+	e := catalogEntryFor(t, testCommit, nil)
+	delete(e, "commit")
+	delete(e, "manifestSha256")
+	e["track"] = true
+	return e
+}
+
+func TestTrackingEntryInstallsAndUpdatesFromTheDefaultBranch(t *testing.T) {
+	env := newCatalogEnv(t, map[string][]byte{
+		"/acme/alerts/tar.gz/HEAD": archiveAt(t, testCommit, "1.2.0", nil),
+	})
+	ctx := context.Background()
+	env.publish(t, entries(trackedEntryFor(t)))
+
+	p, err := env.m.PreviewCatalog(ctx, "traffic-alerts")
+	if err != nil {
+		t.Fatalf("a tracking entry must install from HEAD: %v", err)
+	}
+	if _, err := env.m.Install(p.Token, defaultPerms()); err != nil {
+		t.Fatal(err)
+	}
+	if view := env.m.Catalog(ctx, true); view.Plugins[0].Status != CatalogInstalled {
+		t.Errorf("status = %q, want installed: there is no signed commit to differ from", view.Plugins[0].Status)
+	}
+
+	// The repository moves on without any new catalog entry.
+	env.archives["/acme/alerts/tar.gz/HEAD"] = archiveAt(t, commitV2, "1.3.0", func(m map[string]any) { m["version"] = "1.3.0" })
+	up, err := env.m.PreviewCatalogUpdate(ctx, "traffic-alerts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if up.UpToDate || up.Commit != commitV2 || up.Manifest.Version != "1.3.0" {
+		t.Fatalf("update preview = %+v, want the new HEAD", up)
+	}
+}
+
+func TestTrackingEntryStillRefusesAnotherPluginId(t *testing.T) {
+	env := newCatalogEnv(t, map[string][]byte{
+		"/acme/alerts/tar.gz/HEAD": archiveAt(t, testCommit, "1.2.0", func(m map[string]any) { m["id"] = "something-else" }),
+	})
+	env.publish(t, entries(trackedEntryFor(t)))
+	if _, err := env.m.PreviewCatalog(context.Background(), "traffic-alerts"); !errors.Is(err, ErrCatalogMismatch) {
+		t.Errorf("err = %v, want ErrCatalogMismatch", err)
+	}
+}

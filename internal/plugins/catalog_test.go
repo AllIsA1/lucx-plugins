@@ -146,6 +146,11 @@ func TestParseCatalogIndexRefusesWhatCouldMislead(t *testing.T) {
 		name   string
 		mutate func(map[string]any)
 	}{
+		{"tracking entry with a commit", func(i map[string]any) {
+			e := goodCatalogEntry("block-ads")
+			e["track"] = true
+			i["plugins"] = []any{e}
+		}},
 		{"newer schema", func(i map[string]any) { i["schema"] = 2 }},
 		{"no sequence", func(i map[string]any) { i["sequence"] = 0 }},
 		{"negative sequence", func(i map[string]any) { i["sequence"] = -3 }},
@@ -242,5 +247,19 @@ func TestBuiltinCatalogKeysAreTheProjectsCurrentAndSpareKey(t *testing.T) {
 	t.Setenv("XUI_PLUGINS_CATALOG_KEYS", "")
 	if got := DefaultCatalogKeys(); len(got) != 2 || !got[0].Equal(keys[0]) || !got[1].Equal(keys[1]) {
 		t.Error("the default keys must be the built-in ones, current first")
+	}
+}
+
+func TestParseCatalogIndexAcceptsATrackingEntryWithoutCommit(t *testing.T) {
+	raw := catalogJSON(t, func(i map[string]any) {
+		e := goodCatalogEntry("block-ads")
+		delete(e, "commit")
+		delete(e, "manifestSha256")
+		e["track"] = true
+		i["plugins"] = []any{e}
+	})
+	idx, err := ParseCatalogIndex(raw)
+	if err != nil || len(idx.Plugins) != 1 || !idx.Plugins[0].Track {
+		t.Fatalf("index = %+v, %v", idx, err)
 	}
 }

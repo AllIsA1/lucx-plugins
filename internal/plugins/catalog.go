@@ -47,9 +47,10 @@ type CatalogEntry struct {
 	Name           string           `json:"name"`
 	Summary        string           `json:"summary"`
 	Repo           string           `json:"repo"`
-	Commit         string           `json:"commit"`
+	Commit         string           `json:"commit,omitempty"`
+	Track          bool             `json:"track,omitempty"`
 	Version        string           `json:"version"`
-	ManifestSHA256 string           `json:"manifestSha256"`
+	ManifestSHA256 string           `json:"manifestSha256,omitempty"`
 	Type           string           `json:"type"`
 	Scope          string           `json:"scope"`
 	Permissions    []string         `json:"permissions"`
@@ -163,12 +164,14 @@ func (e *CatalogEntry) validate() error {
 	case err != nil:
 		return fmt.Errorf("invalid repo: %w", err)
 	case src.Ref != "":
-		return errors.New("repo must be the repository link without a branch or tag; the commit pins the version")
-	case !shaPattern.MatchString(e.Commit):
+		return errors.New("repo must be the repository link without a branch or tag; the commit pins the version (or set track)")
+	case e.Track && (e.Commit != "" || e.ManifestSHA256 != ""):
+		return errors.New("a tracking entry names the repository only: no commit and no manifestSha256")
+	case !e.Track && !shaPattern.MatchString(e.Commit):
 		return errors.New("commit must be a full lowercase SHA")
 	case !versionPattern.MatchString(e.Version):
 		return errors.New("invalid version")
-	case !manifestHashPattern.MatchString(e.ManifestSHA256):
+	case !e.Track && !manifestHashPattern.MatchString(e.ManifestSHA256):
 		return errors.New("manifestSha256 must be 64 lowercase hex characters")
 	case e.Type != TypeUI && e.Type != TypeProcess && e.Type != TypeHook:
 		return errors.New("invalid type")

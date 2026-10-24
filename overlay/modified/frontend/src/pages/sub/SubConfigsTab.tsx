@@ -8,7 +8,6 @@ import { isPostQuantumLink, wireguardConfigFromLink } from '@/lib/xray/inbound-l
 import { LinkTags, displaySubLinks } from '@/lib/xray/link-label';
 import { awgGroups } from '@/lib/sub/awgGroups'; // LUCX-HOOK: one row per AmneziaWG node with a format switch
 import AwgFormatRow from './AwgFormatRow'; // LUCX-HOOK
-import VpnConfBlock from './VpnConfBlock';
 import SubQrButton from './SubQrButton';
 
 interface SubConfigsTabProps {
@@ -33,9 +32,7 @@ export default function SubConfigsTab({ links, onCopy }: SubConfigsTabProps) {
       {displaySubLinks(links).map(({ link, parts }, idx) => {
         const rowTitle = parts?.remark || `Link ${idx + 1}`;
         const isWireguardLink = link.startsWith('wireguard://') || link.startsWith('wg://');
-        const isAmneziawgLink = link.startsWith('vpn://');
-        const awg = awgByVpn.get(link); // LUCX-HOOK: a node that has more than one form gets the switch
-        const awgForms = awg && (awg.conf || awg.legacy) ? awg : undefined; // LUCX-HOOK
+        const awgForms = awgByVpn.get(link); // LUCX-HOOK: every AmneziaWG node gets the switch (its .conf is one of the forms)
         return (
           <Fragment key={link}>
             {awgForms ? ( // LUCX-HOOK
@@ -66,13 +63,6 @@ export default function SubConfigsTab({ links, onCopy }: SubConfigsTabProps) {
                 fileName={`${rowTitle || 'peer'}.conf`}
                 qrRemark={rowTitle}
                 tagColor="cyan"
-              />
-            )}
-            {isAmneziawgLink && (
-              <VpnConfBlock
-                link={link}
-                rowTitle={rowTitle}
-                label={t('pages.clients.amneziaWgConfig')}
               />
             )}
           </Fragment>

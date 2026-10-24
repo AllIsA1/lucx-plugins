@@ -47,6 +47,15 @@ hashes it, replaces an existing entry of the same id, keeps the list in id order
 in the index are the plugin's own: a review is only worth something for the commit it was done on, so every new
 commit is a new `add`.
 
+### Entries that follow the repository (`-track`)
+
+`add -track` (instead of `-commit`) writes an entry that vouches for the repository, not for one commit: it has no `commit` and
+no `manifestSha256`, and sets `"track": true`. The panel installs such a plugin from the repository's default branch and offers
+every newer version as an update, without a new signed entry for each release. What stays checked: the plugin id must be the
+listed one, and an update that asks for more permissions, or changes the type or scope, is shown and needs the operator's
+confirmation, as for every update. What is given up: the signature no longer says that this exact code was reviewed. Use it for
+plugins you maintain yourself; `version` and `permissions` in a tracking entry are only what the card shows.
+
 ## The index format (schema 1)
 
 ```json
@@ -67,6 +76,6 @@ commit is a new `add`.
 }
 ```
 
-`repo` is the bare repository link (no branch or tag: the commit pins the version). Unknown fields are ignored so a
+`repo` is the bare repository link (no branch or tag: the commit pins the version, or `"track": true` follows the default branch). Unknown fields are ignored so a
 newer tool can add to the format. Limits: 500 plugins, 1 MiB, names up to 60 and summaries up to 300 characters.
 Screenshots are not part of schema 1: the panel's own content policy would not let the page load images from other sites.

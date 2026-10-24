@@ -112,6 +112,9 @@ func (m *Manager) previewUpdate(ctx context.Context, id, ref string, expect *Cat
 		}
 		src.Ref = ref
 	}
+	if expect != nil && expect.Track {
+		src.Ref = "" // follow the repository, whatever commit the install was made at
+	}
 	p, err := m.previewSource(ctx, src)
 	if err != nil {
 		return nil, err

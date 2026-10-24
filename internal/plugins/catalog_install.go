@@ -32,6 +32,9 @@ func (m *Manager) catalogMismatch(p *Preview, e *CatalogEntry) error {
 		return ErrUnknownToken
 	case p.Manifest.ID != e.ID:
 		return fmt.Errorf("%w: the plugin id is %q, the catalog says %q", ErrCatalogMismatch, p.Manifest.ID, e.ID)
+	case e.Track:
+		// The catalog vouches for the repository, not for a commit: the operator confirms what each version asks for.
+		return nil
 	case p.Commit != e.Commit:
 		return fmt.Errorf("%w: the commit is %s, the catalog says %s", ErrCatalogMismatch, p.Commit, e.Commit)
 	case staged.manifestSHA256 != e.ManifestSHA256:
@@ -52,7 +55,7 @@ func (m *Manager) PreviewCatalog(ctx context.Context, id string) (*Preview, erro
 		return nil, err
 	}
 	src := entry.Source
-	src.Ref = entry.Commit
+	src.Ref = entry.Commit // empty for a tracking entry: the repository's default branch
 	p, err := m.previewSource(ctx, src)
 	if err != nil {
 		return nil, err
@@ -70,6 +73,9 @@ func (m *Manager) PreviewCatalogUpdate(ctx context.Context, id string) (*UpdateP
 	entry, err := m.catalogEntry(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+	if entry.Track {
+		return m.previewUpdate(ctx, id, "", &entry)
 	}
 	return m.previewUpdate(ctx, id, entry.Commit, &entry)
 }

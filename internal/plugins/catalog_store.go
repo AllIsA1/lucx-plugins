@@ -151,7 +151,8 @@ func (m *Manager) catalogPlugin(e CatalogEntry) CatalogPlugin {
 	switch {
 	case !strings.EqualFold(have.Source.Owner, e.Source.Owner) || !strings.EqualFold(have.Source.Repo, e.Source.Repo):
 		p.Status = CatalogIDConflict
-	case have.Commit == e.Commit:
+	case have.Commit == e.Commit || e.Track:
+		// A tracking entry has no commit to compare with: the plugin's own update check finds new versions.
 		p.Status = CatalogInstalled
 	default:
 		p.Status = CatalogUpdateAvailable

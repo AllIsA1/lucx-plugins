@@ -190,3 +190,19 @@ func TestSignRefusesAnIndexThePanelWouldRefuse(t *testing.T) {
 		t.Error("a signature was written for an invalid index")
 	}
 }
+
+func TestAddTrackWritesAnEntryWithoutACommit(t *testing.T) {
+	plugin, _ := writePlugin(t, nil)
+	index := filepath.Join(t.TempDir(), "index.json")
+	if code, _, errOut := run3(t, "add", "-index", index, "-repo", "https://github.com/acme/block-ads", "-track", "-dir", plugin); code != 0 {
+		t.Fatalf("add -track = %d %s", code, errOut)
+	}
+	raw, _ := os.ReadFile(index)
+	idx, err := plugins.ParseCatalogIndex(raw)
+	if err != nil || len(idx.Plugins) != 1 || !idx.Plugins[0].Track || idx.Plugins[0].Commit != "" || idx.Plugins[0].ManifestSHA256 != "" {
+		t.Fatalf("index = %+v, %v", idx, err)
+	}
+	if code, _, _ := run3(t, "add", "-index", index, "-repo", "https://github.com/acme/block-ads", "-track", "-commit", sha1c, "-dir", plugin); code == 0 {
+		t.Error("-track together with -commit must be refused")
+	}
+}

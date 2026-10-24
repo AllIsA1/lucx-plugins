@@ -33,7 +33,7 @@ function renderTab(links: string[], onCopy = vi.fn()) {
   return onCopy;
 }
 
-// the copy button of the nth AmneziaWG row (the config block under it has a copy button of its own)
+// the copy button of the nth AmneziaWG row
 const rowCopy = (n = 0) =>
   within(screen.getAllByRole('radiogroup')[n].closest('.sub-row') as HTMLElement).getByRole(
     'button',
@@ -137,12 +137,13 @@ describe('the AmneziaWG row of the subscription page', () => {
     expect(onCopy).toHaveBeenLastCalledWith(a.vpn);
   });
 
-  it('keeps the old row when the subscription has only the vpn:// line', async () => {
+  it('still offers vpn:// and the .conf when the subscription has only the vpn:// line', async () => {
     const a = node('awg-old', '203.0.113.9');
     renderTab([a.vpn]);
-    await waitFor(() => expect(screen.queryByText('.conf')).toBeNull());
-    expect(screen.queryAllByRole('radiogroup')).toHaveLength(0);
-    expect(screen.queryAllByRole('button', { name: 'Copy' }).length).toBeGreaterThan(1);
+    await waitFor(() => expect(screen.queryByText('.conf')).not.toBeNull());
+    const group = screen.getByRole('radiogroup');
+    expect(within(group).queryByText('amneziawg://')).toBeNull();
+    expect(within(group).queryByText('vpn://')).not.toBeNull();
   });
 
   it('remembers the format of each node apart from the others', async () => {
@@ -159,11 +160,11 @@ describe('the AmneziaWG row of the subscription page', () => {
     expect(onCopy).toHaveBeenLastCalledWith(b.vpn);
   });
 
-  it('still shows the config block under the row', async () => {
+  it('shows no separate config block under the row: the .conf is a format of the switch', async () => {
     const a = node('awg-one', '203.0.113.1');
     renderTab([a.legacy, a.vpn, a.confLink]);
-    await waitFor(() =>
-      expect(document.querySelector('.config-block, [class*="config"]')).not.toBeNull(),
-    );
+    await waitFor(() => expect(screen.queryByText('.conf')).not.toBeNull());
+    expect(screen.queryByText(/AmneziaWG config/i)).toBeNull();
+    expect(document.querySelector('.config-block')).toBeNull();
   });
 });
