@@ -235,6 +235,23 @@
       "seamEngine": {
         "api": "API",
         "sub": "Subscription"
+      },
+      "nodeSystem": {
+        "tooltip": "Plugin system on the node",
+        "title": "Plugin system on {{name}}",
+        "state": {
+          "install": "The node has no plugin system (or it is not running)",
+          "allow": "The plugin system is there, but the node does not let this panel manage plugins",
+          "ready": "The node is ready: this panel can manage its plugins",
+          "wait": "Asking the node…",
+          "failed": "The node does not answer about plugins"
+        },
+        "installHelp": "The plugin system is a program with its own service and a build of the panel; it is installed on the server of the node, not from here. Run this on the node as root (it also updates the system when it is already there):",
+        "copy": "Copy the command",
+        "copied": "Copied",
+        "afterInstall": "The command replaces the node's panel with the build that has the plugin system (settings and data stay). Then, on the node: Plugins → allow the master panel to manage plugins. After that, on this panel: Plugins → Plugins on nodes → install a plugin on the node.",
+        "allowHelp": "On the node open Plugins and switch on «Allow the master panel to manage plugins». Then install plugins on it from this panel: Plugins → Plugins on nodes.",
+        "readyHelp": "Install plugins on this node from Plugins → Plugins on nodes. Nothing is copied to nodes by itself: each plugin is installed on a node by an explicit command."
       }
     }
   }
