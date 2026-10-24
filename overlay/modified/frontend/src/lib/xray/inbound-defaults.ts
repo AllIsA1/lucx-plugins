@@ -325,6 +325,7 @@ export function createDefaultOpenfluxInboundSettings(): OpenfluxInboundSettings 
     telemostUrl: '',
     exitMode: 'l4',
     debugLevel: 0,
+    context: '',
   };
 }
 

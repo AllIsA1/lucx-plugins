@@ -1748,6 +1748,7 @@ export function genOpenfluxLink(input: {
     boardUrl?: string;
     avitoUrl?: string;
     telemostUrl?: string;
+    context?: string;
   };
   const host = (s.shareHost || input.address || '').trim();
   return encodeOpenfluxLink({
@@ -1762,6 +1763,7 @@ export function genOpenfluxLink(input: {
     boardUrl: (s.boardUrl || '').trim(),
     avitoUrl: (s.avitoUrl || '').trim(),
     telemostUrl: (s.telemostUrl || '').trim(),
+    context: (s.context || '').trim(),
   });
 }
 

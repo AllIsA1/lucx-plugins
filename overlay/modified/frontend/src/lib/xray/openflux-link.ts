@@ -18,6 +18,8 @@ export interface OpenfluxLinkInput {
   boardUrl?: string;
   avitoUrl?: string;
   telemostUrl?: string;
+  /** The pinned encryption context the panel stored; empty before the first save. */
+  context?: string;
 }
 
 // The carriers a link can hold besides direct, with the core's transport type and failover priority (higher is
@@ -67,6 +69,8 @@ function b64url(bytes: Uint8Array): string {
 }
 
 export function openfluxContext(input: OpenfluxLinkInput): string {
+  const pinned = (input.context ?? '').trim();
+  if (pinned) return pinned;
   for (const c of CARRIERS) {
     const url = carrierUrl(input, c.field);
     if (url) return url;

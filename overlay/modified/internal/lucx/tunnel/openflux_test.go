@@ -331,3 +331,43 @@ func TestOpenfluxDebugLevelIsOffByDefaultAndMakesTheCoreLogSessions(t *testing.T
 		t.Error("the conf did not change with the level")
 	}
 }
+
+func TestOpenfluxContextIsPinnedOnSaveAndSurvivesEditingTheFirstLink(t *testing.T) {
+	cfg := OpenfluxConfig{Secret: "0123456789abcdef", YandexURL: "https://docs.example/edit/d/one"}.Merge()
+	if cfg.contextURL() != "https://docs.example/edit/d/one" {
+		t.Fatalf("before the first save the context is the first link: %q", cfg.contextURL())
+	}
+	saved, err := cfg.EnsureSecret()
+	if err != nil || saved.Context != "https://docs.example/edit/d/one" {
+		t.Fatalf("saved = %+v, %v", saved, err)
+	}
+	// the operator edits the first link, saves; the clients' links must stay valid
+	edited := saved
+	edited.YandexURL = "https://docs.example/edit/d/two"
+	again, _ := edited.Merge().EnsureSecret()
+	if again.contextURL() != "https://docs.example/edit/d/one" {
+		t.Errorf("context moved with the link: %q", again.contextURL())
+	}
+	if !strings.Contains(again.RenderConf("openflux-1", 18445), "\nURL = https://docs.example/edit/d/one\n") {
+		t.Error("the exit must run with the pinned context")
+	}
+	link, err := again.ClientURI("x", "203.0.113.5", 18445)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := openfluxDecodeLink(t, link).Context; got != "https://docs.example/edit/d/one" {
+		t.Errorf("the link carries %q", got)
+	}
+	// an inbound with no link at all pins the default, and later links do not move it
+	bare, _ := OpenfluxConfig{Secret: "0123456789abcdef"}.Merge().EnsureSecret()
+	bare.MailruURL = "https://cloud.mail.ru/public/a/b"
+	if bare.Merge().contextURL() != openfluxContext {
+		t.Errorf("context = %q", bare.contextURL())
+	}
+	// a context the conf parser would cut is refused
+	bad := saved
+	bad.Context = "http://x#y"
+	if err := bad.Validate(18445); err == nil {
+		t.Error("a context with # was accepted")
+	}
+}

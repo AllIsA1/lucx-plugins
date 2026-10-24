@@ -108,4 +108,20 @@ describe('encodeOpenfluxLink', () => {
     );
     expect(payload.context).toBe('https://m.example/a');
   });
+
+  it('uses the context the panel pinned, whatever the links are now', () => {
+    const payload = JSON.parse(
+      decode(
+        encodeOpenfluxLink({
+          secret: '0123456789abcdef',
+          host: '1.2.3.4',
+          port: 1,
+          yandexUrl: 'https://y.example/new',
+          context: 'https://y.example/old',
+        }),
+      ),
+    );
+    expect(payload.context).toBe('https://y.example/old');
+    expect(payload.transports[1].url).toBe('https://y.example/new');
+  });
 });

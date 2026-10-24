@@ -18,5 +18,6 @@ export const OpenfluxInboundSettingsSchema = z.object({
   telemostUrl: z.string().default(''),
   exitMode: z.enum(['l4', 'l3']).default('l4'),
   debugLevel: z.number().int().default(0),
+  context: z.string().default(''),
 });
 export type OpenfluxInboundSettings = z.infer<typeof OpenfluxInboundSettingsSchema>;

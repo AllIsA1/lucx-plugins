@@ -49,6 +49,10 @@ type OpenfluxConfig struct {
 	// DebugLevel is 0 (the usual log) or 2 (the core's -dd: sessions, carriers, handshakes and errors, no
 	// per-packet lines). It is what shows whether a client reaches the exit at all.
 	DebugLevel int `json:"debugLevel"`
+	// Context is the session's encryption context, which both ends must share: the link hands it to the
+	// client. It used to be the first carrier link there was, so editing that link silently made every
+	// client's link stale. The first save pins it; after that it changes only when it is cleared.
+	Context string `json:"context"`
 }
 
 const (
@@ -86,6 +90,7 @@ func DefaultOpenfluxConfig() OpenfluxConfig {
 func (c OpenfluxConfig) Merge() OpenfluxConfig {
 	c.Secret = strings.TrimSpace(c.Secret)
 	c.ShareHost = strings.TrimSpace(c.ShareHost)
+	c.Context = strings.TrimSpace(c.Context)
 	c.YandexURL = strings.TrimSpace(c.YandexURL)
 	c.MailruURL = strings.TrimSpace(c.MailruURL)
 	c.CupsURL = strings.TrimSpace(c.CupsURL)
@@ -120,7 +125,12 @@ func openfluxSplitLinks(raw string) []string {
 	})
 }
 
+// EnsureSecret is what a save runs on the config: it mints the secret once and pins the encryption context
+// (the first carrier link there is when the config is saved, so a link that is already in use keeps working).
 func (c OpenfluxConfig) EnsureSecret() (OpenfluxConfig, error) {
+	if c.Context == "" {
+		c.Context = c.derivedContext()
+	}
 	if c.Secret != "" {
 		return c, nil
 	}
@@ -141,6 +151,9 @@ func (c OpenfluxConfig) Validate(port int) error {
 	}
 	if err := openfluxHostOK(c.ShareHost); err != nil {
 		return err
+	}
+	if strings.ContainsAny(c.Context, "#;\r\n") {
+		return errors.New("openflux: the context cannot contain # or ;")
 	}
 	if m := strings.ToLower(strings.TrimSpace(c.ExitMode)); m != "" && m != OpenfluxModeL4 && m != OpenfluxModeL3 {
 		return errors.New("openflux: exit mode must be l4 or l3")
@@ -170,7 +183,16 @@ func (c OpenfluxConfig) exitMode() string {
 // UsesL3 says whether the exit forwards raw packets, which needs the host's RST drop rule.
 func (c OpenfluxConfig) UsesL3() bool { return c.exitMode() == OpenfluxModeL3 }
 
+// contextURL is the session's encryption context: the pinned one, or (before the first save with this field)
+// the first carrier link there is.
 func (c OpenfluxConfig) contextURL() string {
+	if c.Context != "" {
+		return c.Context
+	}
+	return c.derivedContext()
+}
+
+func (c OpenfluxConfig) derivedContext() string {
 	for _, car := range openfluxCarriers {
 		if u := car.url(c); u != "" {
 			return u
