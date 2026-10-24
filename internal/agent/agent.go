@@ -130,7 +130,7 @@ func (a *Agent) swap(ctx context.Context, from string, b *builds.Build, st *Stat
 	}
 	st.Original, st.Ours, st.Upstream, st.Release = b.OriginalBinarySha256, b.BinarySha256, b.Upstream, b.Release
 	st.SwappedAt = time.Now().UTC()
-	st.Pending = false
+	st.Pending, st.PendingRelease = false, ""
 	st.LastError = ""
 	a.cfg.Log("replaced the panel binary with %s (build %s)", b.Upstream, b.Release)
 	return nil
@@ -221,7 +221,7 @@ func (a *Agent) Check(ctx context.Context) error {
 		return err
 	}
 	k, b := a.decide(idx, h, st)
-	st.Pending = false
+	st.Pending, st.PendingRelease = false, ""
 	if k == none {
 		return nil
 	}
@@ -229,7 +229,7 @@ func (a *Agent) Check(ctx context.Context) error {
 		st.LastError = err.Error()
 		return err
 	}
-	st.Pending, st.LastError = true, ""
+	st.Pending, st.PendingRelease, st.LastError = true, b.Release, ""
 	return nil
 }
 

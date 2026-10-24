@@ -11,6 +11,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -20,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AllIsA1/lucx-plugins/internal/agent"
 	"github.com/AllIsA1/lucx-plugins/internal/builds"
 )
 
@@ -243,5 +245,104 @@ func TestHostInstallFailsLoudlyAndLeavesNothingWhenTheListCannotBeTrusted(t *tes
 	}
 	if _, err := os.Stat(exe); err == nil {
 		t.Error("a binary was installed from a list nobody trusted")
+	}
+}
+
+type fakeUpdater struct {
+	res     agent.UpdateResult
+	err     error
+	restart bool
+}
+
+func (f *fakeUpdater) Update(_ context.Context, restart bool) (agent.UpdateResult, error) {
+	f.restart = restart
+	return f.res, f.err
+}
+
+func TestUpdateSaysWhatItFoundAndDid(t *testing.T) {
+	cfg := config{RestartAt: "04:00"}
+	cases := map[string]struct {
+		res  agent.UpdateResult
+		want []string
+	}{
+		"nothing newer":    {agent.UpdateResult{Before: "v1-plugins.4", After: "v1-plugins.4"}, []string{"up to date", "v1-plugins.4"}},
+		"updated":          {agent.UpdateResult{Before: "v1-plugins.4", After: "v1-plugins.5", Changed: true}, []string{"updated the panel", "v1-plugins.4 -> v1-plugins.5"}},
+		"from an upstream": {agent.UpdateResult{After: "v1-plugins.5", Changed: true}, []string{"upstream panel", "-> v1-plugins.5"}},
+		"waiting":          {agent.UpdateResult{Before: "v1-plugins.4", After: "v1-plugins.5", Waiting: true}, []string{"v1-plugins.5 is ready", "next panel start", "04:00"}},
+	}
+	for name, c := range cases {
+		var out, errOut bytes.Buffer
+		if code := update(context.Background(), &fakeUpdater{res: c.res}, false, cfg, &out, &errOut); code != 0 {
+			t.Errorf("%s: exit %d (%s)", name, code, errOut.String())
+		}
+		for _, w := range c.want {
+			if !strings.Contains(out.String(), w) {
+				t.Errorf("%s: output %q lacks %q", name, out.String(), w)
+			}
+		}
+	}
+}
+
+func TestUpdateFailsWithTheReasonAndPassesTheRestartChoice(t *testing.T) {
+	var out, errOut bytes.Buffer
+	f := &fakeUpdater{err: errors.New("the published builds list is refused: bad signature")}
+	if code := update(context.Background(), f, true, config{}, &out, &errOut); code != 1 || !strings.Contains(errOut.String(), "refused: bad signature") || out.Len() != 0 {
+		t.Errorf("exit %d, stdout %q, stderr %q", code, out.String(), errOut.String())
+	}
+	f = &fakeUpdater{}
+	update(context.Background(), f, true, config{}, &out, &errOut)
+	if f.restart {
+		t.Error("--no-restart was ignored")
+	}
+	f = &fakeUpdater{}
+	update(context.Background(), f, false, config{}, &out, &errOut)
+	if !f.restart {
+		t.Error("the panel is restarted by default")
+	}
+}
+
+func TestUpdateCommandLine(t *testing.T) {
+	base, panel := setup(t)
+	saved := restartService
+	t.Cleanup(func() { restartService = saved })
+	if _, _, code := invoke(t, append(base, "update", "--bogus")...); code != 2 {
+		t.Errorf("an unknown option: code %d", code)
+	}
+	if _, _, code := invoke(t, append(base, "status", "--no-restart")...); code != 2 {
+		t.Errorf("--no-restart belongs to update only: code %d", code)
+	}
+	for _, args := range [][]string{{"update"}, {"update", "--no-restart"}} {
+		restarted := false
+		restartService = func(context.Context, string) error { restarted = true; return nil }
+		_, errOut, code := invoke(t, append(append([]string{}, base...), args...)...)
+		if code != 1 || errOut == "" {
+			t.Errorf("%v with no list to trust: code %d, stderr %q", args, code, errOut)
+		}
+		if restarted {
+			t.Errorf("%v restarted the panel without a list to trust", args)
+		}
+	}
+	if raw, _ := os.ReadFile(panel); string(raw) != "#!/bin/sh\necho mine\n" {
+		t.Error("the panel binary was touched")
+	}
+}
+
+func TestRestartServiceAsksSystemdAndSaysWhyItFailed(t *testing.T) {
+	dir := t.TempDir()
+	log := filepath.Join(dir, "log")
+	script := "#!/bin/sh\necho \"$@\" >> " + log + "\nif [ \"$2\" = broken ]; then echo 'Unit broken.service not found.' >&2; exit 5; fi\n"
+	if err := os.WriteFile(filepath.Join(dir, "systemctl"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	if err := restartService(context.Background(), "x-ui"); err != nil {
+		t.Fatal(err)
+	}
+	if raw, _ := os.ReadFile(log); string(raw) != "restart x-ui\n" {
+		t.Errorf("systemctl was called with %q", raw)
+	}
+	err := restartService(context.Background(), "broken")
+	if err == nil || !strings.Contains(err.Error(), "Unit broken.service not found") {
+		t.Errorf("err = %v: the reason must reach the operator", err)
 	}
 }

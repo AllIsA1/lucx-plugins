@@ -59,6 +59,20 @@ stops the service and the plugins it started, puts the original binary back (fro
 checked against the signed hash) and removes everything it installed. Plugins and their data stay unless `--purge` is given. The
 panel's own data is never touched.
 
+**Updating the panel's plugin build by hand.** The timers do it by themselves (a check every 30 minutes, the restart at the quiet hour),
+but an operator can ask for it now:
+
+```bash
+sudo lucx-plugins update               # read the signed list, get the newest build, restart the panel onto it, check it is in place
+sudo lucx-plugins update --no-restart  # only get the build ready; the next panel start installs it
+sudo lucx-plugins status               # what is installed, whether a build waits, the last problem
+```
+
+`lucx-plugins` is a link to `lucx-plugins-sync` that the installer creates in `/usr/local/bin` (a file of that name that is not ours
+is left alone, and the uninstaller removes only its own link). Without a newer build nothing is restarted. A list that does not verify,
+a panel binary that is not a known build, or a restart that does not install the build are reported as errors with the reason.
+Running `install.sh` again does the same and also refreshes the program itself. The plugin system service is updated from the Plugins page.
+
 `lucx-plugins-sync status` says what it did to the panel binary and the last problem it met; `systemctl status
 lucx-plugins-host` and `journalctl -u lucx-plugins-host` say how the service is doing. `/etc/lucx-plugins/config` (`PANEL_BINARY`,
 `SERVICE`, `STATE_DIR`, `RESTART_AT`, `INDEX_URL`) and `/etc/lucx-plugins/host.env` (`LUCX_HOST_GATEWAY`) are created once and then

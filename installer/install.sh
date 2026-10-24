@@ -61,6 +61,14 @@ mkdir -p "$BIN_DIR"
 install -m 755 "$tmp/sync" "$SYNC.new"
 mv -f "$SYNC.new" "$SYNC"
 
+# The short command: "lucx-plugins update". A file of that name that is not ours is left alone.
+if [[ ! -e $LINK || -L $LINK ]]; then
+  mkdir -p "$(dirname "$LINK")"
+  ln -sfn "$SYNC" "$LINK"
+else
+  warn "$LINK exists and is not ours; use $SYNC instead of lucx-plugins"
+fi
+
 # The plugin system service comes from the signed list, checked by the program just installed. If that
 # fails nothing else has been changed yet: fix the cause and run this again.
 say "Installing the plugin system service..."
@@ -196,4 +204,5 @@ echo
 echo
 say "Installed. The plugin system service is running; the panel gets its side of it at its next start, and again after every panel update, automatically."
 say "Check it with: systemctl status $HOST_UNIT_NAME"
+say "Update the panel's plugin build at any time with: sudo lucx-plugins update"
 say "Remove it with: curl -fL https://raw.githubusercontent.com/AllIsA1/lucx-plugins/main/installer/uninstall.sh | sudo bash"

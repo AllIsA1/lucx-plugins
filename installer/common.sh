@@ -13,6 +13,8 @@ PURGE=0
 
 BIN_DIR=$ROOT/usr/local/lucx-plugins
 SYNC=$BIN_DIR/lucx-plugins-sync
+# The short name an operator types: lucx-plugins update.
+LINK=$ROOT/usr/local/bin/lucx-plugins
 CONF_DIR=$ROOT/etc/lucx-plugins
 CONF=$CONF_DIR/config
 STATE_DIR=$ROOT/var/lib/lucx-plugins

@@ -43,6 +43,7 @@ echo "$out"
 rm -f "$HOST_UNIT" "$UNIT_DIR"/lucx-plugins-sync.service "$UNIT_DIR"/lucx-plugins-sync.timer \
   "$UNIT_DIR"/lucx-plugins-apply.service "$UNIT_DIR"/lucx-plugins-apply.timer
 "$SYSTEMCTL" daemon-reload
+[[ -L $LINK && $(readlink "$LINK") == "$SYNC" ]] && rm -f "$LINK"
 rm -rf "$BIN_DIR" "$CONF_DIR" "$STATE_DIR"
 
 if ((PURGE)); then

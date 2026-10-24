@@ -56,6 +56,8 @@ type env struct {
 
 	agent    *Agent
 	restarts int
+	// onRestart is what a real restart does besides counting: the panel's start runs at-start.
+	onRestart func()
 }
 
 func tarball(t *testing.T, entries ...tar.Header) []byte {
@@ -133,8 +135,14 @@ func newEnv(t *testing.T) *env {
 		Keys:        []ed25519.PublicKey{pub},
 		Client:      &http.Client{Transport: rewrite{target}, Timeout: 5 * time.Second},
 		Budget:      10 * time.Second,
-		Restart:     func(context.Context) error { e.restarts++; return nil },
-		Log:         func(format string, args ...any) { t.Logf(format, args...) },
+		Restart: func(context.Context) error {
+			e.restarts++
+			if e.onRestart != nil {
+				e.onRestart()
+			}
+			return nil
+		},
+		Log: func(format string, args ...any) { t.Logf(format, args...) },
 	})
 	return e
 }

@@ -34,7 +34,7 @@ var trustedKeys = keys.Builds
 
 const (
 	defaultConfig  = "/etc/lucx-plugins/config"
-	usage          = "usage: lucx-plugins-sync [-config <file>] [-index-url <url>] <at-start|check|apply|restore|status|version>\n       lucx-plugins-sync [-host-exe <file>] [-host-state <dir>] <host-guard|host-install>\n"
+	usage          = "usage: lucx-plugins-sync [-config <file>] [-index-url <url>] <at-start|check|apply|update [--no-restart]|restore|status|version>\n       lucx-plugins-sync [-host-exe <file>] [-host-state <dir>] <host-guard|host-install>\n"
 	defaultPanel   = "/usr/local/x-ui/x-ui"
 	defaultState   = "/var/lib/lucx-plugins"
 	defaultService = "x-ui"
@@ -103,11 +103,19 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	indexFlag := fs.String("index-url", "", "builds list address (default: the published list)")
 	hostExe := fs.String("host-exe", defaultHostExe, "host-guard: the plugin host binary")
 	hostState := fs.String("host-state", defaultHostState, "host-guard: the plugin host's state directory")
-	if err := fs.Parse(args); err != nil || fs.NArg() != 1 {
+	if err := fs.Parse(args); err != nil || fs.NArg() < 1 || fs.NArg() > 2 {
 		fmt.Fprint(stderr, usage)
 		return 2
 	}
 	command := fs.Arg(0)
+	noRestart := false
+	if fs.NArg() == 2 {
+		if command != "update" || (fs.Arg(1) != "--no-restart" && fs.Arg(1) != "-no-restart") {
+			fmt.Fprint(stderr, usage)
+			return 2
+		}
+		noRestart = true
+	}
 	if command == "version" {
 		fmt.Fprintln(stdout, version)
 		return 0
@@ -118,7 +126,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	case "host-install":
 		return hostInstall(ctx, *hostExe, *hostState, stdout, stderr)
 	}
-	if !map[string]bool{"at-start": true, "check": true, "apply": true, "restore": true, "status": true}[command] {
+	if !map[string]bool{"at-start": true, "check": true, "apply": true, "update": true, "restore": true, "status": true}[command] {
 		fmt.Fprint(stderr, usage)
 		return 2
 	}
@@ -144,9 +152,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		IndexURL:    indexURL(cfg, *indexFlag, os.Getenv("LUCX_PLUGINS_INDEX_URL")),
 		Keys:        keyList,
 		Log:         func(format string, v ...any) { fmt.Fprintf(stderr, "lucx-plugins: "+format+"\n", v...) },
-		Restart: func(ctx context.Context) error {
-			return exec.CommandContext(ctx, "systemctl", "restart", cfg.Service).Run()
-		},
+		Restart:     func(ctx context.Context) error { return restartService(ctx, cfg.Service) },
 	})
 	switch command {
 	case "at-start":
@@ -159,6 +165,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return report(stderr, a.Check(ctx))
 	case "apply":
 		return report(stderr, a.Apply(ctx))
+	case "update":
+		return update(ctx, a, noRestart, cfg, stdout, stderr)
 	case "restore":
 		changed, err := a.Restore(ctx)
 		if err != nil {
@@ -174,6 +182,44 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		printStatus(stdout, a.Status(), cfg)
 		return 0
 	}
+}
+
+// restartService is a variable so tests do not restart a real service.
+var restartService = func(ctx context.Context, service string) error {
+	if out, err := exec.CommandContext(ctx, "systemctl", "restart", service).CombinedOutput(); err != nil {
+		return fmt.Errorf("systemctl restart %s: %w: %s", service, err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// updater is what update needs of the agent.
+type updater interface {
+	Update(ctx context.Context, restart bool) (agent.UpdateResult, error)
+}
+
+// update is the manual way to move the panel to the newest signed build: the output says what was
+// found and done, and a failure says why.
+func update(ctx context.Context, a updater, noRestart bool, cfg config, stdout, stderr io.Writer) int {
+	res, err := a.Update(ctx, !noRestart)
+	if err != nil {
+		fmt.Fprintf(stderr, "lucx-plugins: %v\n", err)
+		return 1
+	}
+	name := func(release string) string {
+		if release == "" {
+			return "the upstream panel (no plugin build)"
+		}
+		return release
+	}
+	switch {
+	case res.Changed:
+		fmt.Fprintf(stdout, "updated the panel: %s -> %s\n", name(res.Before), res.After)
+	case res.Waiting:
+		fmt.Fprintf(stdout, "a newer build %s is ready (now: %s); it will be installed at the next panel start (automatic restart around %s, or run this command without --no-restart)\n", res.After, name(res.Before), cfg.RestartAt)
+	default:
+		fmt.Fprintf(stdout, "the panel is up to date: %s\n", res.After)
+	}
+	return 0
 }
 
 // hostGuard is the plugin host's pre-start step: it counts the starts of a freshly updated host and

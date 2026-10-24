@@ -93,6 +93,18 @@ grep -q "INDEX_URL=http://127.0.0.1:1/builds.json" "$r/etc/lucx-plugins/config" 
 [[ $(cat "$r/usr/local/x-ui/x-ui") == $'#!/bin/sh\necho mine' ]] && ok "an unknown panel binary is left alone" || bad "an unknown panel binary is left alone"
 grep -q "restart x-ui" "$r/systemctl.log" && bad "--no-restart must not restart the panel" || ok "--no-restart does not restart the panel"
 
+# 1a. the short command
+[[ -L $r/usr/local/bin/lucx-plugins && $(readlink "$r/usr/local/bin/lucx-plugins") == "$r/usr/local/lucx-plugins/lucx-plugins-sync" ]] && ok "lucx-plugins is a link to the program" || bad "lucx-plugins is a link to the program"
+[[ $("$r/usr/local/bin/lucx-plugins" version) == "$("$r/usr/local/lucx-plugins/lucx-plugins-sync" version)" ]] && ok "the short command runs the program" || bad "the short command runs the program"
+r2=$work/own
+new_root "$r2"
+mkdir -p "$r2/usr/local/bin"
+printf '#!/bin/sh\necho somebody else'"'"'s\n' > "$r2/usr/local/bin/lucx-plugins"
+install_in "$r2" --no-restart > "$work/own.out" 2>&1
+[[ $(cat "$r2/usr/local/bin/lucx-plugins") == $'#!/bin/sh\necho somebody else\'s' ]] && grep -q "is not ours" "$work/own.out" && ok "a foreign file named lucx-plugins is left alone, with a note" || bad "a foreign file named lucx-plugins is left alone, with a note"
+uninstall_in "$r2" --no-restart > /dev/null 2>&1
+[[ -f $r2/usr/local/bin/lucx-plugins ]] && ok "uninstall leaves a foreign lucx-plugins alone" || bad "uninstall leaves a foreign lucx-plugins alone"
+
 # 1b. the plugin system service: binary, unit, environment file, start
 [[ -x $r/usr/local/lucx-plugins/lucx-plugin-host && $("$r/usr/local/lucx-plugins/lucx-plugin-host" -v) == host-1 ]] && ok "the service binary comes from the signed list" || bad "the service binary comes from the signed list"
 unit=$r/etc/systemd/system/lucx-plugins-host.service
@@ -137,7 +149,7 @@ uninstall_in "$r" > "$work/u1.out" 2>&1 || bad "uninstall runs" "$(tail -3 "$wor
 grep -q "disable --now lucx-plugins-host.service" "$r/systemctl.log" && grep -q "stop lucx-plugin-\*.service" "$r/systemctl.log" && ok "uninstall stops the service and the plugins it started" || bad "uninstall stops the service and the plugins it started"
 [[ ! -e $r/etc/systemd/system/lucx-plugins-host.service && ! -e $r/etc/lucx-plugins ]] && ok "uninstall removes the service unit and its environment" || bad "uninstall removes the service unit and its environment"
 [[ -f $r/var/lib/lucx-plugin-host/plugins.json ]] && ok "the service's registry stays without --purge" || bad "the service's registry stays without --purge"
-[[ ! -e $r/usr/local/lucx-plugins && ! -e $r/etc/systemd/system/x-ui.service.d/30-lucx-plugins.conf && ! -e $r/etc/systemd/system/lucx-plugins-apply.timer && ! -e $r/etc/lucx-plugins ]] && ok "uninstall removes everything it installed" || bad "uninstall removes everything it installed"
+[[ ! -e $r/usr/local/lucx-plugins && ! -L $r/usr/local/bin/lucx-plugins && ! -e $r/etc/systemd/system/x-ui.service.d/30-lucx-plugins.conf && ! -e $r/etc/systemd/system/lucx-plugins-apply.timer && ! -e $r/etc/lucx-plugins ]] && ok "uninstall removes everything it installed" || bad "uninstall removes everything it installed"
 [[ -f $r/var/lib/x-ui-plugins/data ]] && ok "plugin data stays without --purge" || bad "plugin data stays without --purge"
 grep -q "restart x-ui" "$r/systemctl.log" && bad "nothing was restored, so nothing should restart" || ok "no restart when there was nothing to restore"
 

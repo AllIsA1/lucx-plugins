@@ -21,7 +21,9 @@ type State struct {
 	SwappedAt   time.Time `json:"swappedAt"`
 	CheckedAt   time.Time `json:"checkedAt"`
 	Pending     bool      `json:"pending"` // a swap is waiting for the panel's next start
-	LastError   string    `json:"lastError"`
+	// PendingRelease is the build that waits, so a person can be told what the next start brings.
+	PendingRelease string `json:"pendingRelease,omitempty"`
+	LastError      string `json:"lastError"`
 }
 
 func (a *Agent) statePath() string { return filepath.Join(a.cfg.StateDir, "state.json") }
