@@ -1,4 +1,8 @@
 {
+  "subscription": {
+    "awgFormatLabel": "AmneziaWG link format",
+    "awgFormatLegacy": "amneziawg:// (legacy)"
+  },
   "menu": {
     "plugins": "Plugins"
   },

@@ -1,4 +1,8 @@
 {
+  "subscription": {
+    "awgFormatLabel": "Формат ссылки AmneziaWG",
+    "awgFormatLegacy": "amneziawg:// (старый)"
+  },
   "menu": {
     "plugins": "Плагины"
   },
