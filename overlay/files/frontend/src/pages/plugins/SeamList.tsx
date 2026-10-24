@@ -11,7 +11,7 @@ export default function SeamList({ seams }: { seams: PluginSeam[] }) {
   const { t } = useTranslation();
   if (seams.length === 0) return null;
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, maxWidth: 360 }}>
       {seams.map((seam) => {
         const methods = seam.methods?.length
           ? seam.methods.join(', ')
