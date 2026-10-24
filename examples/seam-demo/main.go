@@ -38,18 +38,42 @@ func onSeam(c SeamCall) (SeamReply, error) {
 	return SeamReply{}, fmt.Errorf("no seam %s/%s/%s is declared", c.Seam.Engine, c.Seam.Mode, c.Seam.Route)
 }
 
-// addSubscriptionLine appends a line to a plain subscription (base64 of one link per line). Anything
-// else, such as an error page, an HTML page or an answer that already has the line, stays as it is.
+// addSubscriptionLine appends a line to a subscription: base64 of one link per line, or the same links as
+// plain text when the panel's "encrypt subscription" setting is off. Anything else, such as an error
+// page, an HTML page or an answer that already has the line, stays as it is.
 func addSubscriptionLine(c SeamCall) SeamReply {
 	if c.Response == nil || c.Response.Status != http.StatusOK || len(c.Response.Body) == 0 {
 		return Keep()
 	}
-	decoded, err := base64.StdEncoding.DecodeString(string(c.Response.Body))
-	if err != nil || strings.Contains(string(decoded), subscriptionLine) {
+	body := string(c.Response.Body)
+	if strings.Contains(body, subscriptionLine) {
 		return Keep()
 	}
-	changed := base64.StdEncoding.EncodeToString([]byte(strings.TrimRight(string(decoded), "\n") + "\n" + subscriptionLine))
-	return Modify(ResponseChange{Body: Bytes([]byte(changed))})
+	if decoded, err := base64.StdEncoding.DecodeString(body); err == nil {
+		changed := base64.StdEncoding.EncodeToString([]byte(strings.TrimRight(string(decoded), "\n") + "\n" + subscriptionLine))
+		if strings.Contains(string(decoded), subscriptionLine) {
+			return Keep()
+		}
+		return Modify(ResponseChange{Body: Bytes([]byte(changed))})
+	}
+	if isPlainLinks(c.Response) {
+		return Modify(ResponseChange{Body: Bytes([]byte(strings.TrimRight(body, "\n") + "\n" + subscriptionLine))})
+	}
+	return Keep()
+}
+
+// isPlainLinks: a text/plain answer that holds links (vless://, vmess://, ...).
+func isPlainLinks(r *SeamResponse) bool {
+	for name, values := range r.Headers {
+		if strings.EqualFold(name, "Content-Type") {
+			for _, v := range values {
+				if strings.HasPrefix(strings.ToLower(v), "text/plain") && strings.Contains(string(r.Body), "://") {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // teapot answers GET /server/status?teapot=1 itself and lets every other request go on.

@@ -35,12 +35,40 @@ func TestAddsALineToTheSubscription(t *testing.T) {
 	}
 }
 
+// A panel with "encrypt subscription" switched off answers the links as plain text.
+func TestAddsALineToAPlainTextSubscription(t *testing.T) {
+	c := subAfter("vless://a#one\nvless://b#two\n")
+	c.Response.Headers = map[string][]string{"Content-Type": {"text/plain; charset=utf-8"}}
+	reply, err := onSeam(c)
+	if err != nil || reply.Action != "modify" || reply.Response == nil || reply.Response.Body == nil {
+		t.Fatalf("reply = %+v, err %v", reply, err)
+	}
+	if got, want := string(*reply.Response.Body), "vless://a#one\nvless://b#two\n"+subscriptionLine; got != want {
+		t.Errorf("subscription = %q, want %q", got, want)
+	}
+	again := subAfter(string(*reply.Response.Body))
+	again.Response.Headers = c.Response.Headers
+	if reply, _ := onSeam(again); reply.Action != "keep" {
+		t.Errorf("a plain subscription that already has the line must stay as it is: %+v", reply)
+	}
+}
+
 func TestLeavesWhatItDoesNotUnderstandAlone(t *testing.T) {
 	for name, c := range map[string]SeamCall{
-		"not base64":   subAfter("<html>page</html>"),
-		"an error":     func() SeamCall { c := subAfter("Zm9v"); c.Response.Status = 404; return c }(),
-		"empty":        subAfter(""),
-		"no response":  func() SeamCall { c := subAfter("Zm9v"); c.Response = nil; return c }(),
+		"not base64":  subAfter("<html>page</html>"),
+		"an error":    func() SeamCall { c := subAfter("Zm9v"); c.Response.Status = 404; return c }(),
+		"empty":       subAfter(""),
+		"no response": func() SeamCall { c := subAfter("Zm9v"); c.Response = nil; return c }(),
+		"plain text that is no subscription": func() SeamCall {
+			c := subAfter("hello there")
+			c.Response.Headers = map[string][]string{"Content-Type": {"text/plain"}}
+			return c
+		}(),
+		"links in an html page": func() SeamCall {
+			c := subAfter("<a href=\"vless://a\">x</a>")
+			c.Response.Headers = map[string][]string{"Content-Type": {"text/html"}}
+			return c
+		}(),
 		"already done": subAfter(base64.StdEncoding.EncodeToString([]byte("vless://a\n" + subscriptionLine))),
 	} {
 		reply, err := onSeam(c)

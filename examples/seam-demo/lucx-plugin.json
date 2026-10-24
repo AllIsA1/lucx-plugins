@@ -1,7 +1,7 @@
 {
   "id": "seam-demo",
   "name": "Seam Demo",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "apiVersion": "1",
   "description": "Example of a seam plugin: adds a comment line to every subscription, a header to the server status answer, and answers /server/status?teapot=1 itself. Disable the plugin and the panel does what it always did, no restart needed.",
   "author": "LucX-UI",
