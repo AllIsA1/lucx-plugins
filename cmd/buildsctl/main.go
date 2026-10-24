@@ -36,11 +36,6 @@ const usage = `usage: buildsctl <command> [flags]
               make (or move forward) host.json, the signed record of the current plugin host build
   host-sign   (-key <file> | -key-env <VAR>) -index <file>    validate host.json and write <index>.sig
   host-verify -index <file> -sig <file> -pub <base64 key>[,<key>...]
-
-  sidecar-set    -index <file> -name <program> -version v<x.y.z> -commit <sha> -release sidecar-<program>-v<x.y.z>-<n>
-                 -amd64-sha256 <h> -arm64-sha256 <h>    make (or move forward) sidecars.json, the signed record of the helper programs
-  sidecar-sign   (-key <file> | -key-env <VAR>) -index <file>    validate sidecars.json and write <index>.sig
-  sidecar-verify -index <file> -sig <file> -pub <base64 key>[,<key>...]
 `
 
 func main() { os.Exit(run(os.Args[1:], os.Stdout, os.Stderr)) }
@@ -70,12 +65,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 		err = hostSign(args[1:])
 	case "host-verify":
 		err = hostVerify(args[1:], stdout)
-	case "sidecar-set":
-		err = sidecarSet(args[1:])
-	case "sidecar-sign":
-		err = sidecarSign(args[1:])
-	case "sidecar-verify":
-		err = sidecarVerify(args[1:], stdout)
 	default:
 		fmt.Fprint(stderr, usage)
 		return 2
@@ -345,89 +334,6 @@ func hostVerify(args []string, stdout io.Writer) error {
 		return err
 	}
 	if _, err := builds.ParseHost(data); err != nil {
-		return err
-	}
-	fmt.Fprintln(stdout, "signature ok")
-	return nil
-}
-
-func sidecarSet(args []string) error {
-	fs := flags("sidecar-set")
-	path := fs.String("index", "", "sidecars.json to create or update")
-	name := fs.String("name", "", "the program, for example openflux")
-	version := fs.String("version", "", "the upstream tag, v<x.y.z>")
-	commit := fs.String("commit", "", "the upstream commit of that tag")
-	release := fs.String("release", "", "our release: sidecar-<name>-<version>-<n>")
-	amd64 := fs.String("amd64-sha256", "", "sha256 of the amd64 binary")
-	arm64 := fs.String("arm64-sha256", "", "sha256 of the arm64 binary")
-	if err := fs.Parse(args); err != nil || *path == "" || *name == "" || *version == "" || *commit == "" || *release == "" {
-		return errors.New("sidecar-set needs -index, -name, -version, -commit, -release and both hashes")
-	}
-	doc := &builds.SidecarIndex{Schema: builds.SidecarSchemaVersion, Sequence: 0}
-	if current, err := os.ReadFile(*path); err == nil {
-		if doc, err = builds.ParseSidecars(current); err != nil {
-			return fmt.Errorf("the existing %s is invalid: %w", *path, err)
-		}
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	if err := doc.Set(*name, *version, *commit, *release, map[string]string{"amd64": *amd64, "arm64": *arm64}); err != nil {
-		return err
-	}
-	doc.GeneratedAt = time.Now().UTC().Truncate(time.Second)
-	out, err := builds.MarshalSidecars(doc)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(*path, out, 0o644)
-}
-
-func sidecarSign(args []string) error {
-	fs := flags("sidecar-sign")
-	file := fs.String("key", "", "signing key file")
-	env := fs.String("key-env", "", "environment variable holding the signing key")
-	path := fs.String("index", "", "sidecars.json")
-	if err := fs.Parse(args); err != nil || *path == "" {
-		return errors.New("sidecar-sign needs a key and -index <file>")
-	}
-	key, err := loadKey(*file, *env)
-	if err != nil {
-		return err
-	}
-	data, err := os.ReadFile(*path)
-	if err != nil {
-		return err
-	}
-	if _, err := builds.ParseSidecars(data); err != nil {
-		return fmt.Errorf("refusing to sign a document clients would refuse: %w", err)
-	}
-	return os.WriteFile(*path+".sig", []byte(builds.SignSidecars(key, data)+"\n"), 0o644)
-}
-
-func sidecarVerify(args []string, stdout io.Writer) error {
-	fs := flags("sidecar-verify")
-	path := fs.String("index", "", "sidecars.json")
-	sigPath := fs.String("sig", "", "sidecars.json.sig")
-	pub := fs.String("pub", "", "base64 public key(s), comma separated")
-	if err := fs.Parse(args); err != nil || *path == "" || *sigPath == "" || *pub == "" {
-		return errors.New("sidecar-verify needs -index, -sig and -pub")
-	}
-	keys, err := builds.ParseKeys(strings.Split(*pub, ","))
-	if err != nil {
-		return err
-	}
-	data, err := os.ReadFile(*path)
-	if err != nil {
-		return err
-	}
-	sig, err := os.ReadFile(*sigPath)
-	if err != nil {
-		return err
-	}
-	if err := builds.VerifySidecars(data, string(sig), keys); err != nil {
-		return err
-	}
-	if _, err := builds.ParseSidecars(data); err != nil {
 		return err
 	}
 	fmt.Fprintln(stdout, "signature ok")

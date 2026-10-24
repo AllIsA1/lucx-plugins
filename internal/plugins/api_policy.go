@@ -77,7 +77,12 @@ var apiPolicy = map[string][]APIRoute{
 		get("/xray/getOutboundsTraffic", "/xray/getXrayResult", "/xray/outbound-subs"),
 		post("/xray/", "/xray/balancerStatus"),
 	),
-	"api:xray:write":     post("/xray/update", "/xray/resetOutboundsTraffic"),
+	"api:xray:write": post("/xray/update", "/xray/resetOutboundsTraffic"),
+	// openflux is the OpenFlux exit's core binary and nothing else of the tunnel routes (no upload, no logs, no
+	// other core): a plugin that keeps the core up to date needs to see whether it is there and to replace it by
+	// a download that must match a hash it names. The panel runs that binary as root, so write is the dangerous permission it always is.
+	"api:openflux:read":  get("/tunnel/openflux/status"),
+	"api:openflux:write": post("/tunnel/openflux/download", "/tunnel/openflux/deleteBinary"),
 	"api:settings:read":  post("/setting/all"),
 	"api:settings:write": post("/setting/update"),
 }

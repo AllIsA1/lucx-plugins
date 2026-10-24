@@ -58,7 +58,7 @@ The operator sees every permission before installing. Dangerous ones are marked 
 
 | Permission | Grants | Dangerous |
 |---|---|---|
-| `api:<resource>:read` | read routes of the panel API for `clients`, `inbounds`, `hosts`, `nodes`, `server`, `xray`, `settings` | `nodes`, `settings` |
+| `api:<resource>:read` | read routes of the panel API for `clients`, `inbounds`, `hosts`, `nodes`, `server`, `xray`, `settings`, and `openflux` (only the OpenFlux core binary: its status, a download that must match a hash the plugin names, and its removal) | `nodes`, `settings` |
 | `api:<resource>:write` | change routes for the same resources. Write does not include read | always |
 | `events:<name>` | receive a panel event, e.g. `events:client.created` (see *Events*) | no |
 | `pipeline:xray.config` | patch the generated Xray configuration (see *Pipelines*) | always |

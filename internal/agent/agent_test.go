@@ -54,8 +54,6 @@ type env struct {
 	hits  map[string]int
 	hook  func(path string)
 
-	sidecarSeq int64
-
 	agent    *Agent
 	restarts int
 	// onRestart is what a real restart does besides counting: the panel's start runs at-start.

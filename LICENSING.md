@@ -28,8 +28,4 @@ A build published here is a LucX-UI release built from its published source with
 release names the upstream tag and commit and the overlay commit it was made from, with links: together they are the complete
 source of that build, and `scripts/dev.sh` rebuilds the tree from them.
 
-A helper program released here (`sidecar-<name>-<version>-<n>`, today the OpenFlux exit) is the unchanged source of its authors
-(OpenFlux: GPL-3.0-or-later, https://github.com/p1neappleXpress/OpenFlux) built by `scripts/build-sidecar.sh`; the release names
-the upstream tag and commit, which are the complete source, and the license of the program is the one its authors chose.
-
 This text states the author's intent; it is not legal advice.

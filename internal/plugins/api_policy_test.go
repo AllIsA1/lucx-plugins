@@ -40,6 +40,12 @@ func TestAllowAPIFollowsThePermissionsHeld(t *testing.T) {
 		{read, http.MethodGet, "/clients/get/:email", true},
 		{read, http.MethodGet, "/clients/get/alice@example.com", false},
 		{read, http.MethodDelete, "/clients/list", false},
+		{[]string{"api:openflux:read"}, http.MethodGet, "/tunnel/openflux/status", true},
+		{[]string{"api:openflux:read"}, http.MethodPost, "/tunnel/openflux/download", false},
+		{[]string{"api:openflux:write"}, http.MethodPost, "/tunnel/openflux/download", true},
+		{[]string{"api:openflux:write"}, http.MethodPost, "/tunnel/openflux/deleteBinary", true},
+		{[]string{"api:openflux:write"}, http.MethodGet, "/tunnel/openflux/status", false},
+		{[]string{"api:openflux:write", "api:openflux:read"}, http.MethodPost, "/tunnel/openflux/upload", false},
 	}
 	for _, tc := range cases {
 		if got := AllowAPI(tc.perms, tc.method, tc.pattern); got != tc.want {
@@ -76,6 +82,11 @@ func TestAllowAPINeverReachesPrivilegedRoutes(t *testing.T) {
 		{"POST", "/plugins/system/update"},
 		{"POST", "/plugins/x/:id/*path"},
 		{"POST", "/tunnel/naive/upload"},
+		{"POST", "/tunnel/openflux/upload"},
+		{"GET", "/tunnel/openflux/logs"},
+		{"POST", "/tunnel/qwdtt/download"},
+		{"POST", "/tunnel/csqtt/download"},
+		{"POST", "/tunnel/mieru/deleteBinary"},
 		{"POST", "/sidecar-outbounds/upload/:protocol"},
 		{"POST", "/clients/import"},
 		{"GET", "/clients/export"},
@@ -95,7 +106,7 @@ func TestAllowAPINeverReachesPrivilegedRoutes(t *testing.T) {
 func TestAPIPolicyIsWellFormed(t *testing.T) {
 	prefix := map[string]string{
 		"clients": "/clients", "inbounds": "/inbounds", "hosts": "/hosts", "nodes": "/nodes",
-		"server": "/server", "xray": "/xray", "settings": "/setting",
+		"server": "/server", "xray": "/xray", "settings": "/setting", "openflux": "/tunnel/openflux",
 	}
 	seen := map[string]string{}
 	for perm, routes := range apiPolicy {
@@ -132,12 +143,12 @@ func TestAPIPolicyIsWellFormed(t *testing.T) {
 }
 
 func TestSensitiveAPIPermissionsAreDangerous(t *testing.T) {
-	for _, p := range []string{"api:settings:read", "api:settings:write", "api:nodes:read", "api:nodes:write", "api:clients:write"} {
+	for _, p := range []string{"api:settings:read", "api:settings:write", "api:nodes:read", "api:nodes:write", "api:clients:write", "api:openflux:write"} {
 		if !IsDangerousPermission(p) {
 			t.Errorf("%s exposes secrets or controls other servers and must be flagged", p)
 		}
 	}
-	for _, p := range []string{"api:clients:read", "api:inbounds:read", "api:server:read", "api:hosts:read", "api:xray:read"} {
+	for _, p := range []string{"api:clients:read", "api:inbounds:read", "api:server:read", "api:hosts:read", "api:xray:read", "api:openflux:read"} {
 		if IsDangerousPermission(p) {
 			t.Errorf("%s is an ordinary read permission", p)
 		}
