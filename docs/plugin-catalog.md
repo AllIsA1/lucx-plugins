@@ -42,6 +42,9 @@ go run ./cmd/plugincatalog sign -key ~/catalog.key -index index.json
 go run ./cmd/plugincatalog verify -index index.json -sig index.json.sig -pub <public key>
 ```
 
+`remove -index index.json -id <id>` takes a plugin out (and raises `sequence`); servers drop it from the list at their next refresh,
+what is already installed stays.
+
 `add` reads the plugin's `lucx-plugin.json` (id, name, version, type, scope, permissions, license, author, menu icon),
 hashes it, replaces an existing entry of the same id, keeps the list in id order and raises `sequence`. The permissions
 in the index are the plugin's own: a review is only worth something for the commit it was done on, so every new

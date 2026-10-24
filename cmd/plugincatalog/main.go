@@ -33,6 +33,7 @@ const usage = `usage: plugincatalog <command> [flags]
   pubkey -key <file>                       print the public key of a signing key
   add    -index <file> -repo <url> -commit <sha> -dir <plugin dir> [-summary ..] [-verified-by ..] [-verified-at YYYY-MM-DD] [-notes ..]
                                            add or replace a plugin in index.json (fills the rest from its lucx-plugin.json)
+  remove -index <file> -id <plugin id>     take a plugin out of index.json and raise the sequence
   sign   -key <file> -index <file>         validate index.json and write index.json.sig next to it
   verify -index <file> -sig <file> -pub <base64 key>[,<key>...]
 `
@@ -50,6 +51,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		err = pubkey(args[1:], stdout)
 	case "add":
 		err = add(args[1:])
+	case "remove":
+		err = remove(args[1:])
 	case "sign":
 		err = sign(args[1:])
 	case "verify":
@@ -272,4 +275,36 @@ func writeFile(path string, data []byte) error {
 		return err
 	}
 	return os.Rename(tmp.Name(), path)
+}
+
+func remove(args []string) error {
+	fs := newFlags("remove")
+	index := fs.String("index", "", "index.json to change")
+	id := fs.String("id", "", "the plugin to take out")
+	if err := fs.Parse(args); err != nil || *index == "" || *id == "" {
+		return errors.New("remove needs -index and -id")
+	}
+	raw, err := os.ReadFile(*index)
+	if err != nil {
+		return err
+	}
+	idx, err := plugins.ParseCatalogIndex(raw)
+	if err != nil {
+		return fmt.Errorf("%s is not a valid catalog: %w", *index, err)
+	}
+	before := len(idx.Plugins)
+	idx.Plugins = slices.DeleteFunc(idx.Plugins, func(e plugins.CatalogEntry) bool { return e.ID == *id })
+	if len(idx.Plugins) == before {
+		return fmt.Errorf("%s is not in the catalog", *id)
+	}
+	idx.Sequence++
+	idx.GeneratedAt = time.Now().UTC().Truncate(time.Second)
+	out, err := json.MarshalIndent(idx, "", "  ")
+	if err != nil {
+		return err
+	}
+	if _, err := plugins.ParseCatalogIndex(out); err != nil {
+		return fmt.Errorf("the result would be an invalid catalog: %w", err)
+	}
+	return writeFile(*index, append(out, '\n'))
 }

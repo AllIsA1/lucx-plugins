@@ -10,6 +10,7 @@
     "inbounds": {
       "form": {
         "openfluxNote": "OpenFlux exit. One link, one active client. New user = new inbound (own port and carrier URL). Direct uses this inbound port. Paste Yandex, Volga, Board, Telemost, Mail.ru, Cups or Avito URLs for extra carriers; several links of one carrier form a group. Volga, Board, Telemost, Avito and l3 need OpenFlux v0.13 or newer: the Better OpenFlux plugin installs it. Upload the binary on Settings → Cores.",
+        "openfluxUrlHint": "Optional. Several links: one per line or separated by commas (they form one group). No # or ; in a link — the exit config parser cuts those.",
         "openfluxVolgaUrl": "Yandex Volga URL",
         "openfluxBoardUrl": "Yandex Board URL",
         "openfluxAvitoUrl": "Avito URL",
@@ -17,8 +18,7 @@
         "openfluxExitMode": "Exit mode",
         "openfluxExitModeHint": "l4 works everywhere and needs no extra rules. l3 forwards raw packets (faster, Linux root only): the panel adds an iptables rule that drops the RSTs the server itself sends from its address, so its closed ports look filtered. Chosen on creation; changing it restarts the exit.",
         "openfluxModeL4": "l4 (default)",
-        "openfluxModeL3": "l3 (faster, root, iptables rule)",
-        "openfluxUrlHint": "Optional. Several links: one per line or separated by commas (they form one group). No # or ; in a link — the exit config parser cuts those."
+        "openfluxModeL3": "l3 (faster, root, iptables rule)"
       }
     },
     "plugins": {

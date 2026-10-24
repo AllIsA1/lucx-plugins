@@ -16,6 +16,7 @@ import (
 	"github.com/mhsanaei/3x-ui/v3/internal/config"
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
 	"github.com/mhsanaei/3x-ui/v3/internal/logger"
+	kernelwg "github.com/mhsanaei/3x-ui/v3/internal/lucx/wireguard" // LUCX-HOOK: kernel WireGuard
 	"github.com/mhsanaei/3x-ui/v3/internal/tuic"
 	"github.com/mhsanaei/3x-ui/v3/internal/util/json_util"
 	"github.com/mhsanaei/3x-ui/v3/internal/util/maskcompat"
@@ -23,8 +24,10 @@ import (
 
 	// LUCX-HOOK: AWG — restore policy routing synchronously after Xray restarts.
 	"github.com/mhsanaei/3x-ui/v3/internal/awg"
-	// NaiveProxy tunnel SOCKS egress (injectTunnelEgress).
+	// NaiveProxy tunnel SOCKS egress (injectTunnelEgress) + geodata sanitize.
+	"github.com/mhsanaei/3x-ui/v3/internal/lucx"
 	"github.com/mhsanaei/3x-ui/v3/internal/lucx/tunnel"
+
 	// END LUCX-HOOK
 
 	"go.uber.org/atomic"
@@ -186,6 +189,10 @@ func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
 	xrayConfig.API = ensureAPIServices(xrayConfig.API)
 	xrayConfig.Policy = ensureStatsPolicy(xrayConfig.Policy)
 	xrayConfig.RouterConfig = stripDisabledRules(xrayConfig.RouterConfig)
+	// LUCX-HOOK: the core exits when a geodata asset file is missing on disk; a
+	// stock entry whose fetch failed must not take the whole core down.
+	xrayConfig.Geodata = lucx.SanitizeGeodataAssets(xrayConfig.Geodata, config.GetBinFolderPath())
+	// END LUCX-HOOK
 	// A pasted or restored template can carry pre-#6258 XHTTP keys, a pre-26.10.10 xdns mask or a
 	// pre-26.9.9 quicParams.udpHop, which the core ignores, or a udphop not last, which it cannot dial.
 	xrayConfig.OutboundConfigs = healOutboundStreams(xrayConfig.OutboundConfigs,
@@ -216,7 +223,7 @@ func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
 			continue
 		}
 		// LUCX-HOOK: sidecars are not Xray protocols (AWG, tunnels, cover, gateway).
-		if lucxRuntimeSidecar(inbound.Protocol) {
+		if lucxRuntimeSidecar(inbound.Protocol) || kernelwg.IsKernel(inbound) {
 			continue
 		}
 		// END LUCX-HOOK
@@ -450,6 +457,14 @@ func (s *XrayService) GetXrayConfig() (*xray.Config, error) {
 	}
 	// END LUCX-HOOK
 
+	// LUCX-HOOK: standard Linux kernel WireGuard uses a transparent bridge.
+	for _, inbound := range inbounds {
+		if !inbound.Enable || inbound.NodeID != nil || !kernelwg.IsKernel(inbound) {
+			continue
+		}
+		injectKernelWireguardSafely(xrayConfig, inbound)
+	}
+	// END LUCX-HOOK
 	// Route opted-in local mtproto inbounds through the core's router. Each one
 	// gets a loopback SOCKS bridge — tagged with the inbound's own tag so it is
 	// matchable in routing rules — that its mtg sidecar dials Telegram through.

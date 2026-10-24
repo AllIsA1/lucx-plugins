@@ -10,6 +10,7 @@
     "inbounds": {
       "form": {
         "openfluxNote": "OpenFlux exit. Одна ссылка, один активный клиент. Новый пользователь = новый inbound (свой порт и URL канала). Direct слушает порт inbound. URL Яндекса, Volga, Board, Телемоста, Mail.ru, Cups или Avito — дополнительные каналы; несколько ссылок одного канала образуют группу. Volga, Board, Telemost, Avito и l3 требуют OpenFlux v0.13 или новее: его ставит плагин Better OpenFlux. Бинарь — Settings → Cores.",
+        "openfluxUrlHint": "Необязательно. Несколько ссылок — по одной в строке или через запятую (они образуют группу). Без # и ; в ссылке — парсер конфига exit режет их.",
         "openfluxVolgaUrl": "URL Яндекс Volga",
         "openfluxBoardUrl": "URL Яндекс Board",
         "openfluxAvitoUrl": "URL Avito",
@@ -17,8 +18,7 @@
         "openfluxExitMode": "Режим выхода",
         "openfluxExitModeHint": "l4 работает везде и не требует правил. l3 пересылает сырые пакеты (быстрее, только Linux под root): панель добавит правило iptables, сбрасывающее RST, которые сервер сам шлёт со своего адреса, поэтому его закрытые порты выглядят отфильтрованными. Выбирается при создании; смена перезапускает exit.",
         "openfluxModeL4": "l4 (по умолчанию)",
-        "openfluxModeL3": "l3 (быстрее, root, правило iptables)",
-        "openfluxUrlHint": "Необязательно. Несколько ссылок — по одной в строке или через запятую (они образуют группу). Без # и ; в ссылке — парсер конфига exit режет их."
+        "openfluxModeL3": "l3 (быстрее, root, правило iptables)"
       }
     },
     "plugins": {

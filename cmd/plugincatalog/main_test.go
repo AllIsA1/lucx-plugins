@@ -212,3 +212,34 @@ func TestAddTrackWritesAnEntryWithoutACommit(t *testing.T) {
 		t.Fatalf("index = %+v, %v", idx, err)
 	}
 }
+
+func TestRemoveTakesAPluginOutAndMovesTheSequenceOn(t *testing.T) {
+	plugin, _ := writePlugin(t, nil)
+	other, _ := writePlugin(t, func(m map[string]any) { m["id"], m["name"] = "alpha-plugin", "Alpha" })
+	index := filepath.Join(t.TempDir(), "index.json")
+	for repo, dir := range map[string]string{"block-ads": plugin, "alpha": other} {
+		if code, _, errOut := run3(t, "add", "-index", index, "-repo", "https://github.com/acme/"+repo, "-commit", sha1c, "-dir", dir); code != 0 {
+			t.Fatalf("add %s = %d %s", repo, code, errOut)
+		}
+	}
+	raw, _ := os.ReadFile(index)
+	before, _ := plugins.ParseCatalogIndex(raw)
+	if code, _, errOut := run3(t, "remove", "-index", index, "-id", "block-ads"); code != 0 {
+		t.Fatalf("remove = %d %s", code, errOut)
+	}
+	raw, _ = os.ReadFile(index)
+	after, err := plugins.ParseCatalogIndex(raw)
+	if err != nil || len(after.Plugins) != 1 || after.Plugins[0].ID != "alpha-plugin" || after.Sequence != before.Sequence+1 {
+		t.Fatalf("after = %+v, %v", after, err)
+	}
+	if code, _, _ := run3(t, "remove", "-index", index, "-id", "block-ads"); code == 0 {
+		t.Error("removing a plugin that is not there succeeded")
+	}
+	raw2, _ := os.ReadFile(index)
+	if string(raw2) != string(raw) {
+		t.Error("a refused removal changed the index")
+	}
+	if code, _, _ := run3(t, "remove", "-index", index); code == 0 {
+		t.Error("remove without -id succeeded")
+	}
+}
