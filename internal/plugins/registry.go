@@ -38,6 +38,7 @@ type Entry struct {
 	InstallHookDone bool             `json:"installHookDone,omitempty"`
 	UI              UISpec           `json:"ui"`
 	Seams           []Seam           `json:"seams,omitempty"`
+	Requires        []string         `json:"requires,omitempty"`
 	Previous        *PreviousVersion `json:"previous,omitempty"`
 	InstalledAt     time.Time        `json:"installedAt"`
 	Permissions     []string         `json:"permissions"`

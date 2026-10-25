@@ -9,8 +9,10 @@
   "pages": {
     "inbounds": {
       "form": {
+        "csqttSingleNote": "One CSQTT inbound per host — a second one will not start. One password = one device; with the Better CSQTT plugin every client gets a password of their own, issued automatically, so one inbound serves many people. Upload the binary on Settings → Cores. Clients: CSQTT Android APK or iOS anton48 (CSQTT mode, not WRAP-A).",
         "openfluxNote": "OpenFlux exit. One link, one active client. New user = new inbound (own port and carrier URL). Direct uses this inbound port. Paste Yandex, Volga, Board, Telemost, Mail.ru, Cups or Avito URLs for extra carriers; several links of one carrier form a group. Volga, Board, Telemost, Avito and l3 need OpenFlux v0.13 or newer: the Better OpenFlux plugin installs it. Upload the binary on Settings → Cores.",
         "openfluxUrlHint": "Optional. Several links: one per line or separated by commas (they form one group). No # or ; in a link — the exit config parser cuts those.",
+        "csqttPasswordHint": "Empty = auto-generate on save. Bound to the first device_id that connects. This is the shared password: the Better CSQTT plugin gives each client one of their own.",
         "openfluxVolgaUrl": "Yandex Volga URL",
         "openfluxBoardUrl": "Yandex Board URL",
         "openfluxAvitoUrl": "Avito URL",
@@ -151,7 +153,12 @@
           "accept": "Aceito as permissões adicionadas em {node}",
           "apply": "Atualizar no nó",
           "done": "Plugin atualizado no nó"
-        }
+        },
+        "fromPanel": "Installed on this panel",
+        "fromLink": "By link",
+        "linkLabel": "Plugin repository link",
+        "masterOnly": "This plugin is made for the master panel only and cannot run on a node.",
+        "linkNote": "This panel only checks the plugin and does not install it. The node downloads this exact version itself and refuses it if anything differs. The plugin is installed disabled."
       },
       "frame": {
         "unavailable": "A página do plugin não está disponível",

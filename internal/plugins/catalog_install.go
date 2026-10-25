@@ -6,6 +6,7 @@ package plugins
 import (
 	"context"
 	"fmt"
+	"strings"
 )
 
 // catalogEntry finds a plugin in the verified catalog (a stale one still counts: it was verified).
@@ -55,7 +56,10 @@ func (m *Manager) PreviewCatalog(ctx context.Context, id string) (*Preview, erro
 		return nil, err
 	}
 	src := entry.Source
-	src.Ref = entry.Commit // empty for a tracking entry: the repository's default branch
+	src.Ref = entry.Commit
+	if entry.Track {
+		src.Ref = "" // the repository's default branch, so the install does not stay on the commit that was reviewed
+	}
 	p, err := m.previewSource(ctx, src)
 	if err != nil {
 		return nil, err
@@ -66,6 +70,23 @@ func (m *Manager) PreviewCatalog(ctx context.Context, id string) (*Preview, erro
 	}
 	p.Catalog = ListingListed
 	return p, nil
+}
+
+// listedEntry is the catalog entry of an installed plugin when the catalog is reachable (or was, and is kept) and lists
+// the same repository under that id; false otherwise.
+func (m *Manager) listedEntry(ctx context.Context, id string) (CatalogEntry, bool) {
+	have, ok := m.reg.Get(id)
+	if !ok {
+		return CatalogEntry{}, false
+	}
+	entry, err := m.catalogEntry(ctx, id)
+	if err != nil {
+		return CatalogEntry{}, false
+	}
+	if !strings.EqualFold(have.Source.Owner, entry.Source.Owner) || !strings.EqualFold(have.Source.Repo, entry.Source.Repo) {
+		return CatalogEntry{}, false
+	}
+	return entry, true
 }
 
 // PreviewCatalogUpdate is PreviewUpdate pinned to the commit the catalog signed for an installed plugin.

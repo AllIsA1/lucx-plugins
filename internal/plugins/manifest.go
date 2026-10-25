@@ -61,6 +61,8 @@ type Manifest struct {
 	UI              UISpec   `json:"ui"`
 	Hooks           HookSpec `json:"hooks"`
 	Seams           []Seam   `json:"seams,omitempty"`
+	// Requires lists plugins that must be installed and turned on before this one can be installed or turned on.
+	Requires []string `json:"requires,omitempty"`
 }
 
 // RunSpec describes how the panel starts a process plugin.
@@ -147,6 +149,9 @@ func (m *Manifest) Validate() error {
 	default:
 		return fmt.Errorf("invalid scope %q: use master, node or both", m.Scope)
 	}
+	if err := m.validateRequires(); err != nil {
+		return err
+	}
 	if err := m.validatePermissions(); err != nil {
 		return err
 	}
@@ -157,6 +162,27 @@ func (m *Manifest) Validate() error {
 		return err
 	}
 	return m.validateUI()
+}
+
+const maxRequires = 8
+
+func (m *Manifest) validateRequires() error {
+	if len(m.Requires) > maxRequires {
+		return fmt.Errorf("requires has more than %d entries", maxRequires)
+	}
+	seen := map[string]bool{}
+	for _, id := range m.Requires {
+		switch {
+		case !idPattern.MatchString(id):
+			return fmt.Errorf("invalid requires entry %q: use a plugin id", id)
+		case id == m.ID:
+			return errors.New("a plugin cannot require itself")
+		case seen[id]:
+			return fmt.Errorf("requires lists %q twice", id)
+		}
+		seen[id] = true
+	}
+	return nil
 }
 
 func (m *Manifest) validatePermissions() error {

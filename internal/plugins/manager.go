@@ -39,6 +39,8 @@ var (
 	ErrManifestMismatch    = errors.New("the plugin manifest differs from the one that was approved")
 	ErrScopeNotAllowed     = errors.New("the plugin scope does not allow installing it on a node")
 	ErrReplaceConflict     = errors.New("another plugin already replaces that page")
+	ErrRequirementMissing  = errors.New("a plugin this one requires is not installed and turned on")
+	ErrRequiredBy          = errors.New("other plugins need this one")
 )
 
 // Config wires a Manager to the filesystem, the network and the panel version.
@@ -392,6 +394,9 @@ func (m *Manager) install(token string, accepted []string, managedByMaster bool)
 	if err := m.replaceConflict(manifest); err != nil {
 		return Entry{}, err
 	}
+	if err := m.requirementsMetLocked(manifest.Requires); err != nil {
+		return Entry{}, err
+	}
 	target := filepath.Join(m.cfg.CodeDir, manifest.ID)
 	if _, err := os.Lstat(target); err == nil {
 		return Entry{}, fmt.Errorf("%w: %s already exists on disk", ErrAlreadyInstalled, target)
@@ -413,6 +418,7 @@ func (m *Manager) install(token string, accepted []string, managedByMaster bool)
 		ManagedByMaster: managedByMaster,
 		UI:              manifest.UI,
 		Seams:           manifest.Seams,
+		Requires:        slices.Clone(manifest.Requires),
 	}
 	if err := m.reg.Put(entry); err != nil {
 		_ = os.RemoveAll(target)
@@ -465,6 +471,29 @@ func (m *Manager) InstallPinned(ctx context.Context, req PinnedInstall) (Entry, 
 	return m.install(p.Token, req.Permissions, true)
 }
 
+// TakePin turns a previewed plugin into what a node must install: this panel never installs it, it only vouches for
+// the exact commit, manifest and permissions the operator saw. The preview is used up. The plugin must be one a node can run.
+func (m *Manager) TakePin(token string, accepted []string) (PinnedInstall, *Manifest, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	s, ok := m.staged[token]
+	if !ok {
+		return PinnedInstall{}, nil, ErrUnknownToken
+	}
+	manifest := s.preview.Manifest
+	switch {
+	case !SamePermissionSet(accepted, manifest.Permissions):
+		return PinnedInstall{}, nil, ErrPermissionsMismatch
+	case manifest.Scope != ScopeNode && manifest.Scope != ScopeBoth:
+		return PinnedInstall{}, nil, fmt.Errorf("%w: scope is %q", ErrScopeNotAllowed, manifest.Scope)
+	}
+	src := s.preview.Source
+	src.Ref = ""
+	delete(m.staged, token)
+	_ = os.RemoveAll(s.dir)
+	return PinnedInstall{URL: src.String(), Commit: s.preview.Commit, ManifestSHA256: s.manifestSHA256, Permissions: normalizePermissions(manifest.Permissions)}, manifest, nil
+}
+
 func (m *Manager) discard(token string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -482,9 +511,41 @@ func (m *Manager) SetEnabled(id string, enabled bool) error {
 	if !ok {
 		return ErrNotFound
 	}
+	if enabled {
+		if err := m.requirementsMetLocked(e.Requires); err != nil {
+			return err
+		}
+	} else if users := m.dependentsLocked(id, true); len(users) > 0 {
+		return fmt.Errorf("%w: turn off %s first", ErrRequiredBy, strings.Join(users, ", "))
+	}
 	e.Enabled = enabled
 	e.DisabledReason = ""
 	return m.reg.Put(e)
+}
+
+// requirementsMetLocked says whether every plugin in requires is installed and turned on.
+func (m *Manager) requirementsMetLocked(requires []string) error {
+	var missing []string
+	for _, id := range requires {
+		if have, ok := m.reg.Get(id); !ok || !have.Enabled {
+			missing = append(missing, id)
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("%w: %s", ErrRequirementMissing, strings.Join(missing, ", "))
+	}
+	return nil
+}
+
+// dependentsLocked lists the installed plugins that require id (only the turned-on ones with onlyEnabled).
+func (m *Manager) dependentsLocked(id string, onlyEnabled bool) []string {
+	var out []string
+	for _, e := range m.reg.List() {
+		if slices.Contains(e.Requires, id) && (e.Enabled || !onlyEnabled) {
+			out = append(out, e.ID)
+		}
+	}
+	return out
 }
 
 // markDisabled turns a plugin off on the panel's own initiative and records why.
@@ -509,6 +570,9 @@ func (m *Manager) Uninstall(id string, removeData bool) error {
 	defer m.mu.Unlock()
 	if _, ok := m.reg.Get(id); !ok {
 		return ErrNotFound
+	}
+	if users := m.dependentsLocked(id, false); len(users) > 0 {
+		return fmt.Errorf("%w: remove %s first", ErrRequiredBy, strings.Join(users, ", "))
 	}
 	if h, ok := m.proc.(interface{ RunUninstallHook(context.Context, Entry) }); ok {
 		e, _ := m.reg.Get(id)

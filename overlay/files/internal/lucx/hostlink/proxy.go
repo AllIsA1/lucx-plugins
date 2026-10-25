@@ -58,6 +58,7 @@ var AdminRoutes = []Route{
 	{http.MethodGet, "/nodes"},
 	{http.MethodPost, "/nodes/:nodeId/refresh"},
 	{http.MethodPost, "/nodes/:nodeId/install"},
+	{http.MethodPost, "/nodes/:nodeId/install-link"},
 	{http.MethodPost, "/nodes/:nodeId/update/:id"},
 	{http.MethodPost, "/nodes/:nodeId/enable/:id"},
 	{http.MethodPost, "/nodes/:nodeId/disable/:id"},

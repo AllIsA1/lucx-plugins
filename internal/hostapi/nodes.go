@@ -438,6 +438,14 @@ func (s *NodePluginsService) Install(ctx context.Context, nodeID int, pluginID s
 	})
 }
 
+// InstallPinned puts a plugin that is not installed on this panel onto a node, disabled: the request comes from a
+// preview this panel made, so the node installs exactly the commit and manifest the operator saw.
+func (s *NodePluginsService) InstallPinned(ctx context.Context, nodeID int, req NodePluginInstall) error {
+	return s.command(ctx, nodeID, func(ctx context.Context, c NodePluginsClient) error {
+		return c.PluginsInstall(ctx, req)
+	})
+}
+
 // SetEnabled turns a node's plugin on or off.
 func (s *NodePluginsService) SetEnabled(ctx context.Context, nodeID int, pluginID string, enabled bool) error {
 	return s.command(ctx, nodeID, func(ctx context.Context, c NodePluginsClient) error {

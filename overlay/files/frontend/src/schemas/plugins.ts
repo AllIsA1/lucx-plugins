@@ -97,6 +97,7 @@ export const PluginManifestSchema = z.object({
   type: z.string(),
   scope: z.string(),
   permissions: stringList,
+  requires: stringList.optional(),
   seams: z.array(PluginSeamSchema).nullish(),
 });
 

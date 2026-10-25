@@ -48,6 +48,7 @@ The panel does not compile anything. Build the binaries yourself (`make build` i
 | `type` | `process` (runs code), `hook` (runs code, no pages), `ui` (pages only) |
 | `scope` | `master` (default), `node`, `both`. A plugin installed on a panel runs there when its scope is `master` or `both`; one a master panel pushes to a node runs on the node when its scope is `node` or `both`. A `master` plugin is never pushed to a node |
 | `run.command` | relative path inside the repository. `${arch}` becomes `amd64` or `arm64`; `${socket}` and `${data}` are the socket and data paths |
+| `requires` | optional list of plugin ids (up to 8) that must be installed **and turned on** before this one can be installed or turned on. A plugin that others require cannot be turned off or removed while they are installed (turn off/remove those first). The same checks run on a node |
 | `seams` | optional list of places where the plugin takes part in a request (see *Seams*); needs `type: process` |
 | `hooks.install`, `hooks.uninstall` | optional endpoints under `/_lucx/` the panel calls (see Hooks) |
 | `permissions` | see below |
@@ -346,6 +347,10 @@ not copy code: it tells the node the repository, the exact commit, the SHA-256 o
 permissions the operator approved, and the node downloads that commit itself and refuses on any difference. A
 plugin pushed to a node runs there only if its `scope` is `node` or `both`, and the master can only control plugins
 it installed, never ones the node owner installed by hand. Events and pipelines on a node concern that node.
+
+A node can also take **any plugin by its repository link**, one the master panel does not have installed: the install dialog's
+*By link* tab previews the repository on the master (commit, manifest, permissions), and on confirmation the node is told
+that exact commit, manifest hash and permission set, as above. The master panel installs nothing itself.
 
 The master shows each node as reachable, not read yet, offline, without plugin support, locked (the owner has not
 allowed management) or failing, refreshed every 30 seconds. Commands are explicit: nothing installs, updates or

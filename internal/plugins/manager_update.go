@@ -36,6 +36,7 @@ type PreviousVersion struct {
 	Permissions    []string `json:"permissions"`
 	UI             UISpec   `json:"ui"`
 	Seams          []Seam   `json:"seams,omitempty"`
+	Requires       []string `json:"requires,omitempty"`
 }
 
 // PermissionDiff compares the permissions an update asks for with those the operator granted.
@@ -96,6 +97,13 @@ func validUpdateRef(ref string) bool {
 // PreviewUpdate downloads the plugin's own repository again (at ref, or where it was installed from)
 // and says what an update would change. Nothing on disk changes until ApplyUpdate.
 func (m *Manager) PreviewUpdate(ctx context.Context, id, ref string) (*UpdatePreview, error) {
+	if ref == "" {
+		// A plugin the catalog lists is updated the way the catalog says (a tracking entry: the default branch; any
+		// other: the commit it signed), not from the commit the plugin was installed at: that one never changes.
+		if entry, ok := m.listedEntry(ctx, id); ok {
+			return m.previewUpdate(ctx, id, entry.Commit, &entry) // a tracking entry makes it follow the default branch
+		}
+	}
 	return m.previewUpdate(ctx, id, ref, nil)
 }
 
@@ -148,13 +156,14 @@ func (m *Manager) previewUpdate(ctx context.Context, id, ref string, expect *Cat
 func snapshot(e Entry) *PreviousVersion {
 	return &PreviousVersion{
 		Name: e.Name, Version: e.Version, Type: e.Type, Scope: e.Scope, Commit: e.Commit,
-		ManifestSHA256: e.ManifestSHA256, Permissions: slices.Clone(e.Permissions), UI: e.UI, Seams: cloneSeams(e.Seams),
+		ManifestSHA256: e.ManifestSHA256, Permissions: slices.Clone(e.Permissions), UI: e.UI, Seams: cloneSeams(e.Seams), Requires: slices.Clone(e.Requires),
 	}
 }
 
 func restore(e Entry, p *PreviousVersion) Entry {
 	e.Name, e.Version, e.Type, e.Scope, e.Commit = p.Name, p.Version, p.Type, p.Scope, p.Commit
 	e.ManifestSHA256, e.Permissions, e.UI, e.Seams, e.Previous, e.DisabledReason = p.ManifestSHA256, slices.Clone(p.Permissions), p.UI, cloneSeams(p.Seams), nil, ""
+	e.Requires = slices.Clone(p.Requires)
 	return e
 }
 
@@ -180,6 +189,11 @@ func (m *Manager) ApplyUpdate(ctx context.Context, id, token string, accepted []
 	case !SamePermissionSet(accepted, manifest.Permissions):
 		return Entry{}, ErrPermissionsMismatch
 	}
+	if entry.Enabled {
+		if err := m.requirementsMetLocked(manifest.Requires); err != nil {
+			return Entry{}, err
+		}
+	}
 	if m.proc != nil {
 		if err := m.proc.StopPlugin(ctx, id); err != nil {
 			return Entry{}, fmt.Errorf("cannot stop the plugin process, nothing was changed: %w", err)
@@ -201,6 +215,7 @@ func (m *Manager) ApplyUpdate(ctx context.Context, id, token string, accepted []
 	next.Name, next.Version, next.Type, next.Scope = manifest.Name, manifest.Version, manifest.Type, manifest.Scope
 	next.Commit, next.ManifestSHA256, next.UI, next.Seams, next.DisabledReason = s.preview.Commit, s.manifestSHA256, manifest.UI, manifest.Seams, ""
 	next.Permissions = normalizePermissions(manifest.Permissions)
+	next.Requires = slices.Clone(manifest.Requires)
 	next.Previous = snapshot(entry)
 	if err := m.reg.Put(next); err != nil {
 		_ = os.Rename(target, s.dir)

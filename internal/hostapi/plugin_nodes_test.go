@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -216,5 +217,75 @@ func TestWithoutALinkToTheNodesTheNodeRoutesSaySo(t *testing.T) {
 	h := systemHarness(t, "", nil, nil) // a service with no Nodes
 	if r := h.callAt(t, http.MethodGet, "/plugins/nodes", nil); r.Success || !strings.Contains(r.Msg, "not available") {
 		t.Errorf("= %+v, want it to say node management is not available", r)
+	}
+}
+
+func newLinkInstallHarness(t *testing.T, mgr *plugins.Manager) (*pluginsHarness, *nodeClientSpy, int) {
+	t.Helper()
+	book := &nodeBook{}
+	node := book.add("edge", "online", true)
+	spy := &nodeClientSpy{}
+	svc := &PluginService{
+		Provider: func() (*plugins.Manager, error) { return mgr, nil },
+		Nodes: NewNodePluginsServiceFor(func() ([]plugins.Entry, error) { return nil, nil },
+			book.list, func(NodeInfo) NodePluginsClient { return spy }),
+	}
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	NewPluginsController(engine.Group("/panel/api").Group("/plugins"), svc)
+	return &pluginsHarness{engine: engine}, spy, node.ID
+}
+
+func TestAPluginPreviewedByItsLinkGoesToTheNodeWithoutBeingInstalledHere(t *testing.T) {
+	mgr := newNodeManager(t)
+	h, spy, id := newLinkInstallHarness(t, mgr)
+	base := "/plugins/nodes/" + strconv.Itoa(id) + "/install-link"
+
+	var prev struct {
+		Token string `json:"token"`
+	}
+	r := h.callAt(t, http.MethodPost, "/plugins/preview", map[string]string{"url": "https://github.com/acme/alerts"})
+	if err := json.Unmarshal(r.Obj, &prev); err != nil || !r.Success || prev.Token == "" {
+		t.Fatalf("preview = %+v (%v)", r, err)
+	}
+	if r := h.callAt(t, http.MethodPost, base, map[string]any{"token": prev.Token, "permissions": []string{"network"}}); r.Success {
+		t.Fatal("other permissions than the manifest's were accepted")
+	}
+	if r := h.callAt(t, http.MethodPost, base, map[string]any{"token": prev.Token, "permissions": []string{"network", "api:clients:read"}}); !r.Success {
+		t.Fatalf("install-link: %+v", r)
+	}
+	want := pinnedBody(t)
+	got := spy.installed
+	slices.Sort(got.Permissions)
+	if got.URL != want["url"] || got.Commit != want["commit"] || got.ManifestSHA256 != want["manifestSha256"] || !slices.Equal(got.Permissions, []string{"api:clients:read", "network"}) {
+		t.Errorf("the node was told %+v, want %+v", got, want)
+	}
+	if entries := mgr.List(); len(entries) != 0 {
+		t.Errorf("this panel installed it too: %v", entries)
+	}
+	// a preview works once
+	if r := h.callAt(t, http.MethodPost, base, map[string]any{"token": prev.Token, "permissions": []string{"network", "api:clients:read"}}); r.Success {
+		t.Error("a used preview installed again")
+	}
+}
+
+func TestAPluginForThisPanelOnlyCannotBePutOnANode(t *testing.T) {
+	h, spy, id := newPluginNodesHarness(t, "") // the archive newRealManager serves is a master-scope plugin
+	base := "/plugins/nodes/" + strconv.Itoa(id) + "/install-link"
+	r := h.callAt(t, http.MethodPost, "/plugins/preview", map[string]string{"url": "https://github.com/acme/alerts"})
+	var prev struct {
+		Token    string `json:"token"`
+		Manifest struct {
+			Permissions []string `json:"permissions"`
+		} `json:"manifest"`
+	}
+	if err := json.Unmarshal(r.Obj, &prev); err != nil || prev.Token == "" {
+		t.Fatalf("preview = %+v (%v)", r, err)
+	}
+	if r := h.callAt(t, http.MethodPost, base, map[string]any{"token": prev.Token, "permissions": prev.Manifest.Permissions}); r.Success {
+		t.Error("a master-only plugin was sent to a node")
+	}
+	if len(spy.seen()) != 0 {
+		t.Errorf("the node was called: %v", spy.seen())
 	}
 }

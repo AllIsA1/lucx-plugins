@@ -121,7 +121,11 @@ export default function NodePluginsCard({ masterPlugins, onToast }: Props) {
                 <Button
                   size="small"
                   onClick={() =>
-                    setUpdating({ nodeId: node.nodeId, nodeName: node.nodeName, plugin: p })
+                    setUpdating({
+                      nodeId: node.nodeId,
+                      nodeName: node.nodeName,
+                      plugin: p,
+                    })
                   }
                 >
                   {t('pages.plugins.nodes.update.button')}
@@ -165,7 +169,11 @@ export default function NodePluginsCard({ masterPlugins, onToast }: Props) {
         title: '',
         width: 130,
         render: (_: unknown, p) => {
-          const target = { nodeId: node.nodeId, nodeName: node.nodeName, plugin: p };
+          const target = {
+            nodeId: node.nodeId,
+            nodeName: node.nodeName,
+            plugin: p,
+          };
           const own = manageable && p.managedByMaster === true;
           return (
             <Space size={0}>
@@ -236,7 +244,6 @@ export default function NodePluginsCard({ masterPlugins, onToast }: Props) {
       width: 120,
       render: (_: unknown, n) => {
         const manageable = canManageNode(n);
-        const candidates = installCandidates(masterPlugins, n);
         return (
           <Space size={0}>
             <Tooltip title={t('pages.plugins.nodes.refresh')}>
@@ -251,18 +258,12 @@ export default function NodePluginsCard({ masterPlugins, onToast }: Props) {
                 }
               />
             </Tooltip>
-            <Tooltip
-              title={
-                manageable && candidates.length === 0
-                  ? t('pages.plugins.nodes.nothingToInstall')
-                  : undefined
-              }
-            >
+            <Tooltip title={t('pages.plugins.nodes.install')}>
               <Button
                 type="text"
                 aria-label={t('pages.plugins.nodes.install')}
                 icon={<PlusOutlined />}
-                disabled={!manageable || candidates.length === 0}
+                disabled={!manageable}
                 onClick={() => setInstallFor(n)}
               />
             </Tooltip>

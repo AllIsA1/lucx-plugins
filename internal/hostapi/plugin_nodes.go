@@ -26,6 +26,7 @@ func (a *PluginsController) registerNodeRoutes(g *gin.RouterGroup) {
 	g.GET("/nodes", a.nodeList)
 	g.POST("/nodes/:nodeId/refresh", a.nodeRefresh)
 	g.POST("/nodes/:nodeId/install", a.nodeInstall)
+	g.POST("/nodes/:nodeId/install-link", a.nodeInstallLink)
 	g.POST("/nodes/:nodeId/update/:id", a.nodeUpdate)
 	g.POST("/nodes/:nodeId/enable/:id", a.nodeEnable)
 	g.POST("/nodes/:nodeId/disable/:id", a.nodeDisable)
@@ -79,6 +80,30 @@ func (a *PluginsController) nodeInstall(c *gin.Context) {
 	ctx, cancel := nodeCtx(c)
 	defer cancel()
 	done(c, "plugins: node install failed", a.nodes().Install(ctx, id, body.ID, body.Permissions))
+}
+
+// nodeInstallLink installs on a node a plugin the operator previewed by its link on this panel (POST /preview).
+func (a *PluginsController) nodeInstallLink(c *gin.Context) {
+	id, ok := nodeIDParam(c)
+	if !ok {
+		return
+	}
+	var body struct {
+		Token       string   `json:"token"`
+		Permissions []string `json:"permissions"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		jsonMsg(c, "plugins: invalid install body", err)
+		return
+	}
+	req, err := a.svc.PinPreview(body.Token, body.Permissions)
+	if err != nil {
+		jsonMsg(c, "plugins: node install failed", err)
+		return
+	}
+	ctx, cancel := nodeCtx(c)
+	defer cancel()
+	done(c, "plugins: node install failed", a.nodes().InstallPinned(ctx, id, req))
 }
 
 func (a *PluginsController) nodeUpdate(c *gin.Context) {

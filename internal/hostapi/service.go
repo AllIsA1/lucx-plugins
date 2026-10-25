@@ -135,6 +135,19 @@ func (s *PluginService) Install(token string, permissions []string) (plugins.Ent
 	return m.Install(token, permissions)
 }
 
+// PinPreview takes a previewed plugin as a node install request (see plugins.Manager.TakePin).
+func (s *PluginService) PinPreview(token string, permissions []string) (NodePluginInstall, error) {
+	m, err := s.Provider()
+	if err != nil {
+		return NodePluginInstall{}, err
+	}
+	pin, _, err := m.TakePin(token, permissions)
+	if err != nil {
+		return NodePluginInstall{}, err
+	}
+	return NodePluginInstall{URL: pin.URL, Commit: pin.Commit, ManifestSHA256: pin.ManifestSHA256, Permissions: pin.Permissions}, nil
+}
+
 // SetEnabled turns an installed plugin on or off.
 func (s *PluginService) SetEnabled(id string, enabled bool) error {
 	m, err := s.Provider()

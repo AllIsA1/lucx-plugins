@@ -34,11 +34,15 @@ const BASE = '/panel/api/plugins';
 
 export const pluginsApi = {
   state: async (): Promise<Msg<PluginsState>> => {
-    const raw = await HttpUtil.get<PluginsState>(`${BASE}/list`, undefined, { silent: true });
+    const raw = await HttpUtil.get<PluginsState>(`${BASE}/list`, undefined, {
+      silent: true,
+    });
     return parseMsg(raw, PluginsStateSchema, 'plugins/list');
   },
   ui: async (): Promise<Msg<PluginUi>> => {
-    const raw = await HttpUtil.get<PluginUi>(`${BASE}/menu`, undefined, { silent: true });
+    const raw = await HttpUtil.get<PluginUi>(`${BASE}/menu`, undefined, {
+      silent: true,
+    });
     return parseMsg(raw, PluginUiSchema, 'plugins/menu');
   },
   updatePreview: async (id: string, ref?: string): Promise<Msg<UpdatePreview>> => {
@@ -66,7 +70,9 @@ export const pluginsApi = {
     return parseMsg(raw, PluginEntrySchema, 'plugins/rollback');
   },
   catalog: async (): Promise<Msg<CatalogView>> => {
-    const raw = await HttpUtil.get<CatalogView>(`${BASE}/catalog`, undefined, { silent: true });
+    const raw = await HttpUtil.get<CatalogView>(`${BASE}/catalog`, undefined, {
+      silent: true,
+    });
     return parseMsg(raw, CatalogViewSchema, 'plugins/catalog');
   },
   catalogRefresh: async (): Promise<Msg<CatalogView>> => {
@@ -136,7 +142,9 @@ export const pluginsApi = {
   setMasterManagement: (allow: boolean): Promise<Msg<null>> =>
     HttpUtil.post<null>(`${BASE}/master-management`, { allow }, JSON_HEADERS),
   system: async (): Promise<Msg<PluginSystem>> => {
-    const raw = await HttpUtil.get<PluginSystem>(`${BASE}/system`, undefined, { silent: true });
+    const raw = await HttpUtil.get<PluginSystem>(`${BASE}/system`, undefined, {
+      silent: true,
+    });
     return parseMsg(raw, PluginSystemSchema, 'plugins/system');
   },
   systemCheck: (): Promise<Msg<null>> =>
@@ -155,6 +163,13 @@ export const pluginsApi = {
     HttpUtil.post<null>(`${BASE}/nodes/${nodeId}/refresh`, {}, JSON_HEADERS),
   nodeInstall: (nodeId: number, id: string, permissions: string[]): Promise<Msg<null>> =>
     HttpUtil.post<null>(`${BASE}/nodes/${nodeId}/install`, { id, permissions }, JSON_HEADERS),
+  // Puts a plugin previewed by its link (preview) on a node; this panel never installs it.
+  nodeInstallLink: (nodeId: number, token: string, permissions: string[]): Promise<Msg<null>> =>
+    HttpUtil.post<null>(
+      `${BASE}/nodes/${nodeId}/install-link`,
+      { token, permissions },
+      JSON_HEADERS,
+    ),
   nodeSetEnabled: (nodeId: number, id: string, enabled: boolean): Promise<Msg<null>> =>
     HttpUtil.post<null>(
       `${BASE}/nodes/${nodeId}/${enabled ? 'enable' : 'disable'}/${encodeURIComponent(id)}`,

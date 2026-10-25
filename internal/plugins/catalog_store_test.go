@@ -571,3 +571,114 @@ func TestTrackingEntryStillRefusesAnotherPluginId(t *testing.T) {
 		t.Errorf("err = %v, want ErrCatalogMismatch", err)
 	}
 }
+
+// A tracking entry the way the catalog really holds one: the last reviewed commit stays in it.
+func trackedEntryWithCommit(t *testing.T) map[string]any {
+	t.Helper()
+	e := catalogEntryFor(t, testCommit, nil)
+	e["track"] = true
+	return e
+}
+
+func installFromCatalog(t *testing.T, env *catalogEnv) {
+	t.Helper()
+	p, err := env.m.PreviewCatalog(context.Background(), "traffic-alerts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.m.Install(p.Token, defaultPerms()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestATrackedPluginInstalledFromTheCatalogFindsNewVersionsFromTheListButton(t *testing.T) {
+	env := newCatalogEnv(t, map[string][]byte{"/acme/alerts/tar.gz/HEAD": archiveAt(t, testCommit, "1.2.0", nil)})
+	ctx := context.Background()
+	env.publish(t, entries(trackedEntryWithCommit(t)))
+	installFromCatalog(t, env)
+	if have, _ := env.m.reg.Get("traffic-alerts"); have.Source.Ref != "" {
+		t.Errorf("source ref = %q: a tracked install must follow the default branch, not stay at the reviewed commit", have.Source.Ref)
+	}
+
+	env.archives["/acme/alerts/tar.gz/HEAD"] = archiveAt(t, commitV2, "1.3.0", func(m map[string]any) { m["version"] = "1.3.0" })
+	up, err := env.m.PreviewUpdate(ctx, "traffic-alerts", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if up.UpToDate || up.Commit != commitV2 {
+		t.Fatalf("update preview = %+v, want the new HEAD", up)
+	}
+}
+
+func TestAPluginInstalledAtAReviewedCommitIsUpdatedToWhatTheCatalogNowSigns(t *testing.T) {
+	env := newCatalogEnv(t, map[string][]byte{
+		"/acme/alerts/tar.gz/" + testCommit: archiveAt(t, testCommit, "1.2.0", nil),
+		"/acme/alerts/tar.gz/" + commitV2:   archiveAt(t, commitV2, "1.3.0", nil),
+	})
+	ctx := context.Background()
+	env.publish(t, entries(catalogEntryFor(t, testCommit, nil)))
+	installFromCatalog(t, env)
+
+	// The installed commit is the one the install was made at: asking the repository for "that" again says nothing new.
+	next := catalogEntryFor(t, commitV2, func(m map[string]any) { m["version"] = "1.3.0" })
+	next["version"] = "1.3.0"
+	env.publish(t, combine(entries(next), sequenceOf(9)))
+	env.m.Catalog(ctx, true)
+	up, err := env.m.PreviewUpdate(ctx, "traffic-alerts", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if up.UpToDate || up.Commit != commitV2 {
+		t.Fatalf("update preview = %+v, want the commit the catalog signs now", up)
+	}
+}
+
+func TestAnExplicitRefAndAnUnreachableCatalogKeepTheOldWayOfChecking(t *testing.T) {
+	env := newCatalogEnv(t, map[string][]byte{
+		"/acme/alerts/tar.gz/HEAD":        archiveAt(t, testCommit, "1.2.0", nil),
+		"/acme/alerts/tar.gz/" + commitV2: archiveAt(t, commitV2, "1.3.0", nil),
+	})
+	ctx := context.Background()
+	p, err := env.m.Preview(ctx, alertsURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.m.Install(p.Token, defaultPerms()); err != nil {
+		t.Fatal(err)
+	}
+	env.publish(t, entries(trackedEntryWithCommit(t)))
+	if up, err := env.m.PreviewUpdate(ctx, "traffic-alerts", commitV2); err != nil || up.Commit != commitV2 {
+		t.Errorf("explicit ref: %+v, %v", up, err)
+	}
+	// without any catalog the check goes to the repository the plugin came from
+	env2 := newCatalogEnv(t, map[string][]byte{"/acme/alerts/tar.gz/HEAD": archiveAt(t, testCommit, "1.2.0", nil)})
+	p2, err := env2.m.Preview(ctx, alertsURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env2.m.Install(p2.Token, defaultPerms()); err != nil {
+		t.Fatal(err)
+	}
+	if up, err := env2.m.PreviewUpdate(ctx, "traffic-alerts", ""); err != nil || !up.UpToDate {
+		t.Errorf("no catalog: %+v, %v", up, err)
+	}
+}
+
+func TestACatalogEntryOfAnotherRepositoryDoesNotRedirectTheUpdateCheck(t *testing.T) {
+	env := newCatalogEnv(t, map[string][]byte{"/acme/alerts/tar.gz/HEAD": archiveAt(t, testCommit, "1.2.0", nil)})
+	ctx := context.Background()
+	p, err := env.m.Preview(ctx, alertsURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.m.Install(p.Token, defaultPerms()); err != nil {
+		t.Fatal(err)
+	}
+	other := catalogEntryFor(t, commitV2, nil) // a pinned commit that does not exist in the plugin's own repository
+	other["repo"] = "https://github.com/someone-else/alerts"
+	env.publish(t, entries(other))
+	up, err := env.m.PreviewUpdate(ctx, "traffic-alerts", "")
+	if err != nil || !up.UpToDate {
+		t.Errorf("preview = %+v, %v: the entry belongs to another repository, the plugin's own is checked", up, err)
+	}
+}

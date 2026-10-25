@@ -21,6 +21,7 @@ POST /panel/api/plugins/master-management
 POST /panel/api/plugins/nodes/:nodeId/disable/:id
 POST /panel/api/plugins/nodes/:nodeId/enable/:id
 POST /panel/api/plugins/nodes/:nodeId/install
+POST /panel/api/plugins/nodes/:nodeId/install-link
 POST /panel/api/plugins/nodes/:nodeId/refresh
 POST /panel/api/plugins/nodes/:nodeId/restart/:id
 POST /panel/api/plugins/nodes/:nodeId/uninstall/:id
