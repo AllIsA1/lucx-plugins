@@ -12,11 +12,18 @@ import SubQrButton from './SubQrButton';
 
 interface SubConfigsTabProps {
   links: string[];
+  /** What to call a link the panel gives no name, one per link (a plugin sets it); the link itself is not changed. */
+  linkNames?: string[]; // LUCX-HOOK
   onCopy: (value: string, toast?: string) => void;
 }
 
-export default function SubConfigsTab({ links, onCopy }: SubConfigsTabProps) {
+export default function SubConfigsTab({ links, linkNames, onCopy }: SubConfigsTabProps) {
   const { t } = useTranslation();
+  const nameByLink = new Map<string, string>(); // LUCX-HOOK
+  links.forEach((l, i) => {
+    const name = linkNames?.[i];
+    if (typeof name === 'string' && name !== '') nameByLink.set(l, name);
+  });
   const awgByVpn = awgGroups(links); // LUCX-HOOK
 
   return (
@@ -30,7 +37,7 @@ export default function SubConfigsTab({ links, onCopy }: SubConfigsTabProps) {
         </Button>
       </div>
       {displaySubLinks(links).map(({ link, parts }, idx) => {
-        const rowTitle = parts?.remark || `Link ${idx + 1}`;
+        const rowTitle = parts?.remark || nameByLink.get(link) || `Link ${idx + 1}`; // LUCX-HOOK
         const isWireguardLink = link.startsWith('wireguard://') || link.startsWith('wg://');
         const awgForms = awgByVpn.get(link); // LUCX-HOOK: every AmneziaWG node gets the switch (its .conf is one of the forms)
         return (

@@ -34,6 +34,9 @@ const updateHours = Number(subData.subUpdates || 0);
 const announce = subData.announce || '';
 const links: string[] = Array.isArray(subData.links) ? subData.links : [];
 const linkEmails: string[] = Array.isArray(subData.emails) ? subData.emails : [];
+// LUCX-HOOK: names a plugin gives the links the panel names nothing
+const rawLinkNames = (subData as { linkNames?: unknown }).linkNames;
+const linkNames: string[] = Array.isArray(rawLinkNames) ? (rawLinkNames as string[]) : [];
 const totalByte = Number(subData.totalByte || 0);
 const usedByte =
   Number(subData.usedByte || 0) ||
@@ -124,7 +127,7 @@ export default function SubPage() {
             <span className="sub-tab-count">{displaySubLinks(links).length}</span>
           </>
         ),
-        children: <SubConfigsTab links={links} onCopy={copy} />,
+        children: <SubConfigsTab links={links} linkNames={linkNames} onCopy={copy} />,
       });
     }
     return items;
