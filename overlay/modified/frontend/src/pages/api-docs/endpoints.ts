@@ -1919,6 +1919,29 @@ export const sections: readonly Section[] = [
       },
       {
         method: 'POST',
+        path: '/panel/api/plugins/nodes/:nodeId/install-link',
+        summary:
+          "Install onto a node, disabled, a plugin that was previewed on this panel by its repository link (POST /panel/api/plugins/preview) and is not installed here. The commit, manifest hash and URL come from that preview, which is used up; the permissions must equal the manifest's. The node downloads and verifies the commit itself and must have master management allowed. A plugin of scope master cannot be sent. LucX-UI only.",
+        params: [
+          { name: 'nodeId', in: 'path', type: 'integer', desc: 'Node id.' },
+          {
+            name: 'token',
+            in: 'body (json)',
+            type: 'string',
+            desc: 'Token of the preview of the repository link.',
+          },
+          {
+            name: 'permissions',
+            in: 'body (json)',
+            type: 'string[]',
+            desc: "Exactly the permissions in the plugin's manifest.",
+          },
+        ],
+        errorResponse:
+          '{\n  "success": false,\n  "msg": "plugins: node install failed (unknown or expired install token)"\n}',
+      },
+      {
+        method: 'POST',
         path: '/panel/api/plugins/nodes/:nodeId/update/:id',
         summary:
           "Move a plugin the master installed on a node to this panel's commit: the old one is removed (its data stays), the pinned commit from this panel's own record is installed and, if the plugin was on, turned on again. Refused before the node is touched when the permissions differ from this panel's, the plugin is not installed on the node, was installed there by hand, or already runs this commit. There is no automatic way back: a failure says whether the old version was removed and the new one not installed, or the new one is installed but off. The node must have allowed management by the master. LucX-UI only.",
