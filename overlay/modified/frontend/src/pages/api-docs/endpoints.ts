@@ -1750,21 +1750,29 @@ export const sections: readonly Section[] = [
         method: 'GET',
         path: '/panel/api/plugins/system',
         summary:
-          'The plugin system service itself (not a plugin): the release it runs (version, host-N), the newest release the signed host list names (available, empty when this one is current or the newer one failed to start here before), when the list was last read (checkedAt), whether a check or update is running (busy), the release that was just installed and has not yet proved it starts (pending), a release that was rolled back (rolledBack) and the last error. managed is false for a build that does not update itself. Admin session or admin token only: not available to plugin tokens or to a master panel. LucX-UI only.',
+          'The plugin system service itself (not a plugin): the release it runs (version, host-N), the newest release the signed host list names (available, empty when this one is current or the newer one failed to start here before), when the list was last read (checkedAt), whether a check or update is running (busy), the release that was just installed and has not yet proved it starts (pending), a release that was rolled back (rolledBack) and the last error. managed is false for a build that does not update itself. When the sync tool is installed next to the service, panel carries the panel's own plugin build: release (the build it runs, empty for an upstream binary), available (a newer build that is ready), checkedAt, busy and error. Admin session or admin token only: not available to plugin tokens or to a master panel. LucX-UI only.',
         response:
-          '{\n  "success": true,\n  "obj": {\n    "managed": true,\n    "version": "host-3",\n    "available": "host-4",\n    "checkedAt": "2026-10-23T12:00:00Z",\n    "busy": false,\n    "pending": "",\n    "rolledBack": "",\n    "error": ""\n  }\n}',
+          '{\n  "success": true,\n  "obj": {\n    "managed": true,\n    "version": "host-3",\n    "available": "host-4",\n    "checkedAt": "2026-10-23T12:00:00Z",\n    "busy": false,\n    "pending": "",\n    "rolledBack": "",\n    "error": "",\n    "panel": {\n      "managed": true,\n      "release": "v3.10.2-lucx.312-plugins.1",\n      "available": "v3.10.2-lucx.314-plugins.1",\n      "checkedAt": "2026-10-25T12:00:00Z",\n      "busy": false,\n      "error": ""\n    }\n  }\n}',
       },
       {
         method: 'POST',
         path: '/panel/api/plugins/system/check',
         summary:
-          'Read the signed host list now and report whether a newer release exists (see GET /panel/api/plugins/system). Changes nothing else. The service also checks by itself every 6 hours. Admin only. LucX-UI only.',
+          'Read the signed host list and the signed builds list now and report whether a newer plugin system release or a newer plugin build of the panel exists (see GET /panel/api/plugins/system); a newer panel build is downloaded and kept ready. Both are tried; a failure of one is reported after the other was tried. Changes nothing else. The service also checks by itself every 6 hours. Admin only. LucX-UI only.',
       },
       {
         method: 'POST',
         path: '/panel/api/plugins/system/update',
         summary:
-          'Install the newest release of the plugin system: download, verify the signed hash, run it once, replace the service binary (the previous one is kept for rollback) and restart the service. Returns after the new binary is in place, just before the service restarts; for a few seconds /panel/api/plugins/* answers with an unavailable message. The panel, the plugins and VPN connections are not restarted. Fails when already up to date, when a signature or hash does not match or when an update is already running. Admin only. LucX-UI only.',
+          'Install the newest release of the plugin system: download, verify the signed hash, run it once, replace the service binary (the previous one is kept for rollback) and restart the service. Returns after the new binary is in place, just before the service restarts; for a few seconds /panel/api/plugins/* answers with an unavailable message. The panel, the plugins and VPN connections are not restarted. Fails when already up to date, when a signature or hash does not match or when an update is already running. With the body {"part": "panel"} it instead installs the newest plugin build of the panel, as `lucx-plugins update` does: the sync tool runs as a transient systemd unit (the service itself cannot write the panel binary), replaces the panel binary and restarts the panel, so the answer to this call may never arrive; read GET /panel/api/plugins/system (panel.release, panel.error) once the panel is back. Admin only. LucX-UI only.',
+        params: [
+          {
+            name: 'part',
+            in: 'body (json)',
+            type: 'string',
+            desc: 'Empty for the plugin system service, or "panel" for the panel\'s plugin build.',
+          },
+        ],
       },
       {
         method: 'POST',

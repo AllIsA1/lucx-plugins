@@ -26,6 +26,7 @@ import (
 	"github.com/AllIsA1/lucx-plugins/internal/hostapi"
 	"github.com/AllIsA1/lucx-plugins/internal/hostupdate"
 	"github.com/AllIsA1/lucx-plugins/internal/logx"
+	"github.com/AllIsA1/lucx-plugins/internal/panelsync"
 	"github.com/AllIsA1/lucx-plugins/internal/plugins"
 	"github.com/AllIsA1/lucx-plugins/keys"
 )
@@ -147,6 +148,13 @@ func run(ctx context.Context, cfg config, up *hostupdate.Updater) error {
 	svc := hostapi.NewPluginService()
 	restart := make(chan struct{}, 1)
 	svc.Updater = up
+	if cfg.Exe != "" {
+		// The sync tool is installed next to the host; the page shows the panel's plugin build only when it is.
+		svc.Panel = panelsync.New(panelsync.Config{
+			Exe:      filepath.Join(filepath.Dir(cfg.Exe), "lucx-plugins-sync"),
+			StateDir: envOr("LUCX_PLUGINS_SYNC_STATE", "/var/lib/lucx-plugins"),
+		})
+	}
 	// The master panel's nodes: listed and reached through the panel's internal socket.
 	panel := hostapi.NewPanelLink(cfg.PanelSocket)
 	svc.Nodes = hostapi.NewNodePluginsServiceFor(

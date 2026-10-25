@@ -6,6 +6,7 @@ package hostapi
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/AllIsA1/lucx-plugins/internal/hostupdate"
+	"github.com/AllIsA1/lucx-plugins/internal/panelsync"
 	"github.com/AllIsA1/lucx-plugins/internal/plugins"
 )
 
@@ -416,26 +418,88 @@ func extendWriteDeadline(c *gin.Context, d time.Duration) {
 // restartDelay lets the answer to the update request leave before the host stops serving.
 const restartDelay = 400 * time.Millisecond
 
-func (a *PluginsController) systemStatus(c *gin.Context) {
-	if a.svc.Updater == nil {
-		jsonObj(c, hostupdate.Status{}, nil)
-		return
-	}
-	jsonObj(c, a.svc.Updater.Status(), nil)
+// panelUpdateTimeout covers the download of the build and the panel's restart.
+const panelUpdateTimeout = 8 * time.Minute
+
+// systemView is the plugin system's own state plus the panel's plugin build.
+type systemView struct {
+	hostupdate.Status
+	Panel *panelsync.Status `json:"panel,omitempty"`
 }
 
+func (a *PluginsController) panelUpdater() PanelUpdater {
+	if a.svc.Panel != nil && a.svc.Panel.Status().Managed {
+		return a.svc.Panel
+	}
+	return nil
+}
+
+func (a *PluginsController) systemStatus(c *gin.Context) {
+	var v systemView
+	if a.svc.Updater != nil {
+		v.Status = a.svc.Updater.Status()
+	}
+	if p := a.panelUpdater(); p != nil {
+		st := p.Status()
+		v.Panel = &st
+	}
+	jsonObj(c, v, nil)
+}
+
+// systemCheck looks for a newer plugin system and a newer plugin build of the panel; both are tried.
 func (a *PluginsController) systemCheck(c *gin.Context) {
-	if a.svc.Updater == nil {
+	panel := a.panelUpdater()
+	if a.svc.Updater == nil && panel == nil {
 		jsonMsg(c, "plugins: this plugin system build does not update itself", errors.New("not managed"))
 		return
 	}
-	extendWriteDeadline(c, pluginRestartTimeout+pluginSlack)
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(c.Request.Context()), pluginRestartTimeout)
+	// The panel build is downloaded by a check (about 140 MB), so this takes longer than a plain host check.
+	extendWriteDeadline(c, pluginPreviewTimeout+pluginSlack)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(c.Request.Context()), pluginPreviewTimeout)
 	defer cancel()
-	done(c, "plugins: cannot check for a newer plugin system", a.svc.Updater.Check(ctx))
+	var errs []error
+	if a.svc.Updater != nil {
+		if err := a.svc.Updater.Check(ctx); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if panel != nil {
+		if err := panel.Check(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("panel build: %w", err))
+		}
+	}
+	done(c, "plugins: cannot check for a newer plugin system", errors.Join(errs...))
 }
 
+// systemUpdate installs the newer plugin system; with {"part":"panel"} it installs the newer plugin build of the
+// panel instead, which restarts the panel (so this call's own answer may never arrive; the state is what to read).
 func (a *PluginsController) systemUpdate(c *gin.Context) {
+	var body struct {
+		Part string `json:"part"`
+	}
+	if c.Request.ContentLength != 0 {
+		if err := c.ShouldBindJSON(&body); err != nil {
+			jsonMsg(c, "plugins: invalid update body", err)
+			return
+		}
+	}
+	switch body.Part {
+	case "panel":
+		panel := a.panelUpdater()
+		if panel == nil {
+			jsonMsg(c, "plugins: this plugin system cannot update the panel build", errors.New("not managed"))
+			return
+		}
+		extendWriteDeadline(c, panelUpdateTimeout+pluginSlack)
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(c.Request.Context()), panelUpdateTimeout)
+		defer cancel()
+		done(c, "plugins: cannot update the panel build", panel.Apply(ctx))
+		return
+	case "":
+	default:
+		jsonMsg(c, "plugins: invalid update body", fmt.Errorf("unknown part %q", body.Part))
+		return
+	}
 	if a.svc.Updater == nil {
 		jsonMsg(c, "plugins: this plugin system build does not update itself", errors.New("not managed"))
 		return

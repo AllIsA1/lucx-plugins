@@ -11,12 +11,20 @@ import (
 	"time"
 
 	"github.com/AllIsA1/lucx-plugins/internal/hostupdate"
+	"github.com/AllIsA1/lucx-plugins/internal/panelsync"
 	"github.com/AllIsA1/lucx-plugins/internal/plugins"
 )
 
 // SystemUpdater is the part of the host that replaces the host itself with a newer build.
 type SystemUpdater interface {
 	Status() hostupdate.Status
+	Check(ctx context.Context) error
+	Apply(ctx context.Context) error
+}
+
+// PanelUpdater is the part of the host that moves the panel to a newer plugin build, as "lucx-plugins update" does.
+type PanelUpdater interface {
+	Status() panelsync.Status
 	Check(ctx context.Context) error
 	Apply(ctx context.Context) error
 }
@@ -30,6 +38,8 @@ type PluginService struct {
 	UpdateHealthTimeout time.Duration
 	// Updater replaces the host itself; nil means this host does not update itself.
 	Updater SystemUpdater
+	// Panel updates the panel's own plugin build; nil when the host has no way to (then the page shows only the host).
+	Panel PanelUpdater
 	// Nodes manages the plugins of the master panel's nodes; nil on a host that has no link to a panel's nodes.
 	Nodes *NodePluginsService
 	// RestartHost ends the process so it can start again as the new build; it is called after the update was answered.

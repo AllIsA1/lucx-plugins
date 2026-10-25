@@ -149,8 +149,9 @@ export const pluginsApi = {
   },
   systemCheck: (): Promise<Msg<null>> =>
     HttpUtil.post<null>(`${BASE}/system/check`, {}, JSON_HEADERS),
-  systemUpdate: (): Promise<Msg<null>> =>
-    HttpUtil.post<null>(`${BASE}/system/update`, {}, JSON_HEADERS),
+  // Without a part it updates the plugin system service; with 'panel' the panel's plugin build, which restarts the panel.
+  systemUpdate: (part?: 'panel'): Promise<Msg<null>> =>
+    HttpUtil.post<null>(`${BASE}/system/update`, part ? { part } : {}, JSON_HEADERS),
   saveArchiveBase: (archiveBase: string): Promise<Msg<null>> =>
     HttpUtil.post<null>(`${BASE}/settings`, { archiveBase }, JSON_HEADERS),
   nodes: async (): Promise<Msg<NodePluginStatus[]>> => {

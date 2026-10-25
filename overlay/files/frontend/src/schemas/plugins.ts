@@ -245,5 +245,16 @@ export const PluginSystemSchema = z.object({
   pending: z.string(),
   rolledBack: z.string(),
   error: z.string(),
+  // The panel's own plugin build, when the sync tool is installed next to the plugin system.
+  panel: z
+    .object({
+      managed: z.boolean(),
+      release: z.string(),
+      available: z.string(),
+      checkedAt: z.string(),
+      busy: z.boolean(),
+      error: z.string(),
+    })
+    .optional(),
 });
 export type PluginSystem = z.infer<typeof PluginSystemSchema>;

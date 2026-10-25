@@ -68,6 +68,11 @@ sudo lucx-plugins update --no-restart  # only get the build ready; the next pane
 sudo lucx-plugins status               # what is installed, whether a build waits, the last problem
 ```
 
+The same can be done from the panel (host-6 and later): the **Plugin system** card on the Plugins page shows the plugin system release and the
+panel's plugin build, **Check for updates** looks for both, and **Update** moves both: the plugin system first, then the panel (the
+host starts `lucx-plugins-sync update` as a transient systemd unit, because its own sandbox cannot write the panel binary or restart
+the panel). The panel restarts, so the page is unavailable for a minute and must be reloaded.
+
 `lucx-plugins` is a link to `lucx-plugins-sync` that the installer creates in `/usr/local/bin` (a file of that name that is not ours
 is left alone, and the uninstaller removes only its own link). Without a newer build nothing is restarted. A list that does not verify,
 a panel binary that is not a known build, or a restart that does not install the build are reported as errors with the reason.
