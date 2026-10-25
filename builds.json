@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "sequence": 34,
-  "generatedAt": "2026-10-25T15:08:24Z",
+  "sequence": 36,
+  "generatedAt": "2026-10-25T16:40:29Z",
   "builds": [
     {
       "upstream": "v3.10.2-lucx.307",
@@ -152,6 +152,36 @@
         "sha256": "442278d5125f632c996c8fd9d6c8219d48984aedfff6f807a5aa1bcc3432292f"
       },
       "binarySha256": "e9a802d6fd8835c9bde87133b070c4ff83f76c068cc96be1c18421d66659a418"
+    },
+    {
+      "upstream": "v3.10.2-lucx.316",
+      "arch": "amd64",
+      "originalBinarySha256": "c358e696e133361411ec8def54fe9c64ab2d237438258c8e435d47d9b2641cca",
+      "originalArchive": {
+        "url": "https://github.com/AlexeyLCP/lucx-ui/releases/download/v3.10.2-lucx.316/x-ui-linux-amd64.tar.gz",
+        "sha256": "f461d76b130955be625c10cd95fcd7a30a9c0fa53808a8ba3ace0013f9b61e5e"
+      },
+      "release": "v3.10.2-lucx.316-plugins.1",
+      "build": {
+        "url": "https://github.com/AllIsA1/lucx-plugins/releases/download/v3.10.2-lucx.316-plugins.1/x-ui-plugins-linux-amd64.tar.gz",
+        "sha256": "c495123cfd9e8a7baad3d0d3e0307ae77d4d3dd693dcc7eeac19a1a2af2759d7"
+      },
+      "binarySha256": "22c6321dd0fc0cce935201a8a884542e1b95697da0f2c439fcfb47196e76dd44"
+    },
+    {
+      "upstream": "v3.10.2-lucx.316",
+      "arch": "arm64",
+      "originalBinarySha256": "67d8426c3170649f9b89670eb26b8ce61ed4ddf4092707725a9200e8458e4911",
+      "originalArchive": {
+        "url": "https://github.com/AlexeyLCP/lucx-ui/releases/download/v3.10.2-lucx.316/x-ui-linux-arm64.tar.gz",
+        "sha256": "acb751c990e7c6b6fd2024e00b77792da827c16d9bd8e97edd5ef49df7d6df19"
+      },
+      "release": "v3.10.2-lucx.316-plugins.1",
+      "build": {
+        "url": "https://github.com/AllIsA1/lucx-plugins/releases/download/v3.10.2-lucx.316-plugins.1/x-ui-plugins-linux-arm64.tar.gz",
+        "sha256": "df3a9125325f6c6d50cb91a3f4d5f5d922fb1e45411700aededcb0daf4480a58"
+      },
+      "binarySha256": "9faeb4ddd9860195426d6c73ee9887aaf74e8596c9069be01760881a190539bc"
     }
   ]
 }
