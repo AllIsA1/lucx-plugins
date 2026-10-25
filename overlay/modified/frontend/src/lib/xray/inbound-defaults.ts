@@ -19,6 +19,7 @@ import type { OpenfluxInboundSettings } from '@/schemas/protocols/inbound/openfl
 import type { MieruInboundSettings } from '@/schemas/protocols/inbound/mieru';
 import type { TrustTunnelInboundSettings } from '@/schemas/protocols/inbound/trusttunnel';
 import type { AnytlsInboundSettings } from '@/schemas/protocols/inbound/anytls';
+import type { WgosocksInboundSettings } from '@/schemas/protocols/inbound/wgosocks'; // LUCX-HOOK: wgobfs SOCKS5-exit
 import type { TproxyInboundSettings } from '@/schemas/protocols/inbound/tproxy';
 import type { CoverInboundSettings } from '@/schemas/protocols/inbound/cover';
 import type { GatewayInboundSettings } from '@/schemas/protocols/inbound/gateway';
@@ -383,6 +384,20 @@ export function createDefaultAnytlsInboundSettings(): AnytlsInboundSettings {
   };
 }
 
+export function createDefaultWgosocksInboundSettings(): WgosocksInboundSettings {
+  return {
+    key: '',
+    masking: 'MEDIA',
+    mediaSsrc: '',
+    mediaPt: 0,
+    mediaClock: 0,
+    maxDummy: 4,
+    idleTimeout: 300,
+    maxClients: 1024,
+    clients: [],
+  };
+}
+
 export function createDefaultGatewayInboundSettings(): GatewayInboundSettings {
   return { publicHost: '' };
 }
@@ -644,6 +659,7 @@ export type AnyInboundSettings =
   | MieruInboundSettings
   | TrustTunnelInboundSettings
   | AnytlsInboundSettings
+  | WgosocksInboundSettings // LUCX-HOOK: wgobfs SOCKS5-exit
   | TproxyInboundSettings
   | CoverInboundSettings
   | GatewayInboundSettings
@@ -701,6 +717,8 @@ export function createDefaultInboundSettings(protocol: string): AnyInboundSettin
       return createDefaultCoverInboundSettings();
     case 'gateway':
       return createDefaultGatewayInboundSettings();
+    case 'wgosocks':
+      return createDefaultWgosocksInboundSettings(); // LUCX-HOOK: wgobfs SOCKS5-exit
     case 'masque':
       return createDefaultMasqueInboundSettings();
     default:

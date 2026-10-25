@@ -49,15 +49,20 @@ jobs:
         run: |
           set -euo pipefail
           since=$(tr -d '[:space:]' < build/since)
+          # The plugin system is built for the newest upstream release only: an older release never gets a new
+          # build, however it is asked for, and a newer release replaces it as the one to build.
+          latest=$(gh api "repos/$UPSTREAM_REPO/releases?per_page=30" \
+            --jq ".[] | select(.draft==false and .prerelease==false and .published_at > \"$since\") | .tag_name" |
+            grep -E '^v[0-9]+\.[0-9]+\.[0-9]+-lucx\.[0-9]+$' | sort -V | tail -1 || true)
           if [ -n "$INPUT_TAG" ]; then
+            if [ "$INPUT_TAG" != "$latest" ]; then
+              echo "::error::$INPUT_TAG is not the newest upstream release (${latest:-none}); the plugin system is built for the newest release only"
+              exit 1
+            fi
             tags=$(printf '%s\n' "$INPUT_TAG")
           else
             built=$(gh release list -R "$GITHUB_REPOSITORY" --limit 300 --json tagName --jq '.[].tagName' | sed -E 's/-plugins\.[0-9]+$//' | sort -u)
-            candidates=$(gh api "repos/$UPSTREAM_REPO/releases?per_page=30" \
-              --jq ".[] | select(.draft==false and .prerelease==false and .published_at > \"$since\") | .tag_name" |
-              grep -E '^v[0-9]+\.[0-9]+\.[0-9]+-lucx\.[0-9]+$' || true)
-            # oldest first, three per run at most
-            tags=$(comm -23 <(printf '%s\n' "$candidates" | sed '/^$/d' | sort -V) <(printf '%s\n' "$built" | sort -V) | head -3)
+            tags=$(comm -23 <(printf '%s\n' "$latest" | sed '/^$/d' | sort -V) <(printf '%s\n' "$built" | sort -V) | head -1)
           fi
           if [ -z "$tags" ]; then
             echo "nothing to build"
