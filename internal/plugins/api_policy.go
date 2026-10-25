@@ -83,6 +83,11 @@ var apiPolicy = map[string][]APIRoute{
 	// a download that must match a hash it names. The panel runs that binary as root, so write is the dangerous permission it always is.
 	"api:openflux:read":  get("/tunnel/openflux/status"),
 	"api:openflux:write": post("/tunnel/openflux/download", "/tunnel/openflux/deleteBinary"),
+	// cores: whether each tunnel core other than OpenFlux (which has its own pair) is there and running. Read only:
+	// replacing a core is a download the panel runs as root, which no plugin may do for these yet.
+	"api:cores:read": get(
+		"/tunnel/naive/status", "/tunnel/olcrtc/status", "/tunnel/qwdtt/status", "/tunnel/csqtt/status", "/tunnel/mieru/status",
+		"/tunnel/trusttunnel/status", "/tunnel/anytls/status", "/tunnel/tproxy/status", "/tunnel/mtproxy/status"),
 	"api:settings:read":  post("/setting/all"),
 	"api:settings:write": post("/setting/update"),
 }

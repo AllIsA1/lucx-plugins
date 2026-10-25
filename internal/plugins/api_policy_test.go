@@ -46,6 +46,11 @@ func TestAllowAPIFollowsThePermissionsHeld(t *testing.T) {
 		{[]string{"api:openflux:write"}, http.MethodPost, "/tunnel/openflux/deleteBinary", true},
 		{[]string{"api:openflux:write"}, http.MethodGet, "/tunnel/openflux/status", false},
 		{[]string{"api:openflux:write", "api:openflux:read"}, http.MethodPost, "/tunnel/openflux/upload", false},
+		{[]string{"api:cores:read"}, http.MethodGet, "/tunnel/mieru/status", true},
+		{[]string{"api:cores:read"}, http.MethodGet, "/tunnel/openflux/status", false},
+		{[]string{"api:cores:read"}, http.MethodGet, "/tunnel/mieru/logs", false},
+		{[]string{"api:cores:read"}, http.MethodPost, "/tunnel/mieru/download", false},
+		{[]string{"api:cores:read"}, http.MethodGet, "/tunnel/naive/logs", false},
 	}
 	for _, tc := range cases {
 		if got := AllowAPI(tc.perms, tc.method, tc.pattern); got != tc.want {
@@ -106,7 +111,7 @@ func TestAllowAPINeverReachesPrivilegedRoutes(t *testing.T) {
 func TestAPIPolicyIsWellFormed(t *testing.T) {
 	prefix := map[string]string{
 		"clients": "/clients", "inbounds": "/inbounds", "hosts": "/hosts", "nodes": "/nodes",
-		"server": "/server", "xray": "/xray", "settings": "/setting", "openflux": "/tunnel/openflux",
+		"server": "/server", "xray": "/xray", "settings": "/setting", "openflux": "/tunnel/openflux", "cores": "/tunnel",
 	}
 	seen := map[string]string{}
 	for perm, routes := range apiPolicy {
@@ -135,6 +140,9 @@ func TestAPIPolicyIsWellFormed(t *testing.T) {
 	}
 	for resource := range prefix {
 		for _, mode := range []string{"read", "write"} {
+			if resource == "cores" && mode == "write" {
+				continue // read only
+			}
 			if _, ok := apiPolicy["api:"+resource+":"+mode]; !ok {
 				t.Errorf("no policy for api:%s:%s although the grammar accepts it", resource, mode)
 			}
@@ -148,7 +156,7 @@ func TestSensitiveAPIPermissionsAreDangerous(t *testing.T) {
 			t.Errorf("%s exposes secrets or controls other servers and must be flagged", p)
 		}
 	}
-	for _, p := range []string{"api:clients:read", "api:inbounds:read", "api:server:read", "api:hosts:read", "api:xray:read", "api:openflux:read"} {
+	for _, p := range []string{"api:clients:read", "api:inbounds:read", "api:server:read", "api:hosts:read", "api:xray:read", "api:openflux:read", "api:cores:read"} {
 		if IsDangerousPermission(p) {
 			t.Errorf("%s is an ordinary read permission", p)
 		}
@@ -189,5 +197,14 @@ func TestAllowedRoutesListsOnlyWhatThePermissionsGrant(t *testing.T) {
 		if routes[i-1].Pattern > routes[i].Pattern {
 			t.Fatalf("the list must be sorted so the header is stable: %v before %v", routes[i-1], routes[i])
 		}
+	}
+}
+
+func TestCoresIsAReadOnlyResource(t *testing.T) {
+	if err := ValidatePermission("api:cores:read"); err != nil {
+		t.Errorf("api:cores:read: %v", err)
+	}
+	if err := ValidatePermission("api:cores:write"); err == nil {
+		t.Error("api:cores:write exists: no plugin may replace these cores yet")
 	}
 }
