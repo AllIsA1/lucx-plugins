@@ -124,7 +124,6 @@
         "count": "Plugins",
         "refresh": "Refresh",
         "install": "Install a plugin on this node",
-        "nothingToInstall": "Every plugin that can run on nodes is already installed here.",
         "installTitle": "Install on {node}",
         "pick": "Plugin",
         "installNote": "The node downloads this exact version itself and refuses it if anything differs. The plugin is installed disabled.",

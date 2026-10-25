@@ -124,7 +124,6 @@
         "count": "Plugin",
         "refresh": "Làm mới",
         "install": "Cài plugin lên node này",
-        "nothingToInstall": "Mọi plugin có thể chạy trên node đã được cài ở đây.",
         "installTitle": "Cài lên {node}",
         "pick": "Plugin",
         "installNote": "Node tự tải đúng phiên bản này và từ chối nếu có điểm khác biệt. Plugin được cài ở trạng thái tắt.",

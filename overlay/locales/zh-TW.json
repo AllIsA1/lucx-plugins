@@ -124,7 +124,6 @@
         "count": "外掛",
         "refresh": "重新整理",
         "install": "在此節點上安裝外掛",
-        "nothingToInstall": "所有可在節點上執行的外掛都已安裝。",
         "installTitle": "安裝到 {node}",
         "pick": "外掛",
         "installNote": "節點自行下載這個確切的版本，若有任何不同則拒絕。外掛安裝後處於停用狀態。",

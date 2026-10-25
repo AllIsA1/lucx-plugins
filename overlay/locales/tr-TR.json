@@ -124,7 +124,6 @@
         "count": "Eklentiler",
         "refresh": "Yenile",
         "install": "Bu düğüme eklenti kur",
-        "nothingToInstall": "Düğümlerde çalışabilen tüm eklentiler burada zaten kurulu.",
         "installTitle": "{node} üzerine kur",
         "pick": "Eklenti",
         "installNote": "Düğüm tam olarak bu sürümü kendisi indirir ve herhangi bir fark varsa reddeder. Eklenti devre dışı kurulur.",

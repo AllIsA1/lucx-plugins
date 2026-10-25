@@ -124,7 +124,6 @@
         "count": "插件",
         "refresh": "刷新",
         "install": "在此节点上安装插件",
-        "nothingToInstall": "所有可在节点上运行的插件均已安装。",
         "installTitle": "安装到 {node}",
         "pick": "插件",
         "installNote": "节点自行下载这个确切的版本，若有任何不同则拒绝。插件安装后处于停用状态。",

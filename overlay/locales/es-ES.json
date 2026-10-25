@@ -124,7 +124,6 @@
         "count": "Plugins",
         "refresh": "Actualizar",
         "install": "Instalar un plugin en este nodo",
-        "nothingToInstall": "Todos los plugins que pueden ejecutarse en nodos ya están instalados aquí.",
         "installTitle": "Instalar en {node}",
         "pick": "Plugin",
         "installNote": "El nodo descarga esta versión exacta por sí mismo y la rechaza si algo difiere. El plugin se instala desactivado.",

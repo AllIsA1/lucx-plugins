@@ -124,7 +124,6 @@
         "count": "Plugin",
         "refresh": "Segarkan",
         "install": "Pasang plugin di node ini",
-        "nothingToInstall": "Semua plugin yang dapat berjalan di node sudah terpasang di sini.",
         "installTitle": "Pasang di {node}",
         "pick": "Plugin",
         "installNote": "Node mengunduh versi persis ini sendiri dan menolaknya jika ada yang berbeda. Plugin dipasang dalam keadaan nonaktif.",
