@@ -47,7 +47,7 @@ need_root() {
 need_systemd() {
   [[ -n $ROOT ]] && return 0
   command -v "$SYSTEMCTL" > /dev/null 2>&1 && [[ -d /run/systemd/system ]] ||
-    die "this host does not run systemd. The plugin build is installed by a systemd drop-in; other init systems are not supported yet."
+    die "this host does not run systemd. The plugin build is installed by a systemd drop-in; other init systems are not supported (a Keenetic/Entware router, for one: the plugin system is not made for routers and has no build for them)."
 }
 
 parse_args() {

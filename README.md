@@ -26,6 +26,13 @@ program with its own releases (`host-N`, recorded in the signed `host.json`), so
 page, without rebuilding or restarting the panel. A new binary that fails to start is replaced by the previous one. Without the
 service the panel is exactly the panel it would be without plugins.
 
+## Not supported
+
+Routers are not a target. The panel itself installs on a Keenetic router (Entware, aarch64) since lucx.316 with its own script, but the
+plugin system is not made for them: there is no systemd there, and the plugin system, the sync tool and the plugin builds are not built
+or tested for that setup. The installer refuses a host without systemd, and the builds list only has the amd64 and arm64 Linux servers.
+On a router keep the panel's own build and update it with the panel's own script.
+
 ## Installing
 
 On a server that already runs LucX-UI under systemd, as root:

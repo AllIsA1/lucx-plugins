@@ -822,6 +822,11 @@ func routingTagIsBalancer(routing map[string]any, tag string) bool {
 // Shared with injectTunnelEgress (NaiveProxy also dials plain TCP via SOCKS5).
 const mtprotoEgressSocksSettings = `{"auth":"noauth","udp":false}`
 
+// udpEgressSocksSettings is the bridge variant for sidecars whose transport
+// carries UDP too (Mieru, TrustTunnel): their clients dial via SOCKS5 UDP
+// ASSOCIATE; loopback only, so the UDP relay opens nowhere.
+const udpEgressSocksSettings = `{"auth":"noauth","udp":true}`
+
 // LUCX-HOOK: injectNaiveInboundEgress wires one routed Naive inbound into Xray as a
 // loopback SOCKS bridge tagged with the inbound's own tag (mtproto pattern).
 func injectNaiveInboundEgress(cfg *xray.Config, inbound *model.Inbound) {
@@ -836,7 +841,7 @@ func injectNaiveInboundEgress(cfg *xray.Config, inbound *model.Inbound) {
 	if !parsed.RouteThroughXray || parsed.RouteXrayPort <= 0 || inbound.Tag == "" {
 		return
 	}
-	injectSocksEgress(cfg, inbound.Tag, parsed.RouteXrayPort, parsed.OutboundTag, "naive egress", true)
+	injectSocksEgress(cfg, inbound.Tag, parsed.RouteXrayPort, parsed.OutboundTag, "naive egress", true, false)
 }
 
 func injectTproxyEgress(cfg *xray.Config, inbound *model.Inbound) {
@@ -923,17 +928,17 @@ func injectAnytlsEgress(cfg *xray.Config, inbound *model.Inbound) {
 	if !parsed.RouteThroughXray || parsed.RouteXrayPort <= 0 || inbound.Tag == "" {
 		return
 	}
-	injectSocksEgress(cfg, inbound.Tag, parsed.RouteXrayPort, parsed.OutboundTag, "anytls egress", false)
+	injectSocksEgress(cfg, inbound.Tag, parsed.RouteXrayPort, parsed.OutboundTag, "anytls egress", false, false)
 }
 
 func injectTunnelEgress(cfg *xray.Config, naive tunnel.NaiveConfig) {
 	if !naive.Enabled || !naive.RouteThroughXray || naive.RouteXrayPort <= 0 {
 		return
 	}
-	injectSocksEgress(cfg, tunnel.NaiveEgressTag, naive.RouteXrayPort, naive.OutboundTag, "tunnel egress", true)
+	injectSocksEgress(cfg, tunnel.NaiveEgressTag, naive.RouteXrayPort, naive.OutboundTag, "tunnel egress", true, false)
 }
 
-func injectSocksEgress(cfg *xray.Config, tag string, port int, outboundTag, logPrefix string, auth bool) {
+func injectSocksEgress(cfg *xray.Config, tag string, port int, outboundTag, logPrefix string, auth, udp bool) {
 	for i := range cfg.InboundConfigs {
 		if cfg.InboundConfigs[i].Tag == tag {
 			logger.Warning(logPrefix, ": inbound tag [", tag, "] already present in generated config, skipping bridge")
@@ -983,6 +988,9 @@ func injectSocksEgress(cfg *xray.Config, tag string, port int, outboundTag, logP
 		}
 	}
 	settings := json_util.RawMessage(mtprotoEgressSocksSettings)
+	if udp {
+		settings = json_util.RawMessage(udpEgressSocksSettings)
+	}
 	if auth {
 		user, pass := tunnel.SocksBridgeAuth()
 		if raw, err := json.Marshal(map[string]any{
@@ -1211,7 +1219,7 @@ func injectOlcrtcEgress(cfg *xray.Config, inbound *model.Inbound) {
 	if !ok || !cfgO.RouteThroughXray || cfgO.RouteXrayPort <= 0 || inbound.Tag == "" {
 		return
 	}
-	injectSocksEgress(cfg, inbound.Tag, cfgO.RouteXrayPort, cfgO.OutboundTag, "olcrtc egress", false)
+	injectSocksEgress(cfg, inbound.Tag, cfgO.RouteXrayPort, cfgO.OutboundTag, "olcrtc egress", false, false)
 }
 
 // injectMieruEgress wires a routed mieru inbound as a loopback SOCKS bridge.
@@ -1223,7 +1231,7 @@ func injectMieruEgress(cfg *xray.Config, inbound *model.Inbound) {
 	if !ok || !cfgM.RouteThroughXray || cfgM.RouteXrayPort <= 0 || inbound.Tag == "" {
 		return
 	}
-	injectSocksEgress(cfg, inbound.Tag, cfgM.RouteXrayPort, cfgM.OutboundTag, "mieru egress", false)
+	injectSocksEgress(cfg, inbound.Tag, cfgM.RouteXrayPort, cfgM.OutboundTag, "mieru egress", false, true)
 }
 
 // injectTrustTunnelEgress wires a routed TrustTunnel inbound as a loopback
@@ -1235,7 +1243,7 @@ func injectTrustTunnelEgress(cfg *xray.Config, inbound *model.Inbound) {
 	if !ok || !cfgT.RouteThroughXray || cfgT.RouteXrayPort <= 0 || inbound.Tag == "" {
 		return
 	}
-	injectSocksEgress(cfg, inbound.Tag, cfgT.RouteXrayPort, cfgT.OutboundTag, "trusttunnel egress", false)
+	injectSocksEgress(cfg, inbound.Tag, cfgT.RouteXrayPort, cfgT.OutboundTag, "trusttunnel egress", false, true)
 }
 
 // injectQwdttEgress wires a routed qWDTT inbound into Xray as a TUN bridge
