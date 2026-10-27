@@ -3517,6 +3517,9 @@ func (s *SubService) genOlcrtcLink(inbound *model.Inbound) string {
 	if !ok || !inbound.Enable {
 		return ""
 	}
+	if r := strings.TrimSpace(inbound.Remark); r != "" {
+		cfg.Remark = r // the name the inbound has now, not the one saved with its first settings
+	}
 	return cfg.ClientURI()
 }
 

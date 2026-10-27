@@ -1862,7 +1862,9 @@ export interface GenOlcrtcLinkInput {
   remark?: string;
 }
 
-// genOlcrtcLink builds olcrtc://provider?transport@room#key (single credential).
+// genOlcrtcLink builds olcrtc://provider?transport@room#key[$name] (single credential). The "$name" tail is the URI
+// convention's comment field, the server's name in a client; it is the inbound's remark unless noLinkName is set.
+// Keep in step with OlcrtcConfig.ClientURI in internal/lucx/tunnel/olcrtc.go.
 export function genOlcrtcLink(input: GenOlcrtcLinkInput): string {
   if (input.inbound.protocol !== 'olcrtc') return '';
   const s = input.inbound.settings as {
@@ -1880,6 +1882,11 @@ export function genOlcrtcLink(input: GenOlcrtcLinkInput): string {
     videoH?: number;
     videoFps?: number;
     videoCodec?: string;
+    videoQrSize?: number;
+    videoQrRecovery?: string;
+    videoTileModule?: number;
+    videoTileRs?: number;
+    noLinkName?: boolean;
   };
   const room = (s.roomId ?? '').trim();
   const key = (s.cryptoKey ?? '').trim();
@@ -1893,9 +1900,32 @@ export function genOlcrtcLink(input: GenOlcrtcLinkInput): string {
   } else if (transport === 'seichannel') {
     transport = `seichannel<fps=${s.seiFps || 30}&batch=${s.seiBatch || 64}&frag=${s.seiFrag || 900}&ack-ms=${s.seiAck || 2000}>`;
   } else if (transport === 'videochannel') {
-    transport = `videochannel<video-w=${s.videoW || 1080}&video-h=${s.videoH || 1080}&video-fps=${s.videoFps || 30}&video-codec=${s.videoCodec || 'qrcode'}>`;
+    const codec = s.videoCodec || 'qrcode';
+    let params = `video-w=${s.videoW || 1080}&video-h=${s.videoH || 1080}&video-fps=${s.videoFps || 30}&video-codec=${codec}`;
+    if (codec === 'tile') {
+      if (s.videoTileModule && s.videoTileModule > 0)
+        params += `&video-tile-module=${s.videoTileModule}`;
+      if (s.videoTileRs && s.videoTileRs > 0) params += `&video-tile-rs=${s.videoTileRs}`;
+    } else {
+      if (s.videoQrSize && s.videoQrSize > 0) params += `&video-qr-size=${s.videoQrSize}`;
+      if (s.videoQrRecovery) params += `&video-qr-recovery=${s.videoQrRecovery}`;
+    }
+    transport = `videochannel<${params}>`;
   }
-  return `olcrtc://${provider}?${transport}@${room}#${key}`;
+  const name = s.noLinkName ? '' : olcrtcLinkName(input.inbound.remark ?? '');
+  return `olcrtc://${provider}?${transport}@${room}#${key}${name ? `$${name}` : ''}`;
+}
+
+// olcrtcLinkName makes a remark fit the URI's comment field: one line, no "$", at most 100 characters.
+function olcrtcLinkName(remark: string): string {
+  const oneLine = remark
+    .replace(/\$/g, '-')
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .join(' ');
+  return Array.from(oneLine).slice(0, 100).join('').trim();
 }
 
 // Per-peer wireguard fanout. Each peer gets its own link (or .conf

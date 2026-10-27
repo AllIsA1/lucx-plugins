@@ -9,6 +9,7 @@
   "pages": {
     "inbounds": {
       "form": {
+        "olcrtcRoomIdHint": "Jitsi: full room URL. Telemost / WB Stream: room id. SaluteJazz: code:password. VK Calls: https://vk.ru/call/join/… . MTS Link: https://my.mts-link.ru/j/owner/event",
         "csqttSingleNote": "One CSQTT inbound per host — a second one will not start. One password = one device; with the Better CSQTT plugin every client gets a password of their own, issued automatically, so one inbound serves many people. Upload the binary on Settings → Cores. Clients: CSQTT Android APK or iOS anton48 (CSQTT mode, not WRAP-A).",
         "openfluxNote": "OpenFlux exit. One link, one active client. New user = new inbound (own port and carrier URL). Direct uses this inbound port. Paste Yandex, Volga, Board, Telemost, Mail.ru, Cups or Avito URLs for extra carriers; several links of one carrier form a group. Volga, Board, Telemost, Avito and l3 need OpenFlux v0.13 or newer: the Better OpenFlux plugin installs it. Upload the binary on Settings → Cores.",
         "openfluxUrlHint": "Optional. Several links: one per line or separated by commas (they form one group). No # or ; in a link — the exit config parser cuts those.",
@@ -24,7 +25,38 @@
         "openfluxDebug": "Exit log",
         "openfluxDebugHint": "Detailed: the exit also logs sessions, carriers, handshakes and errors, so a client that cannot connect shows up in the panel log (Settings → Cores → OpenFlux, or the service journal). Changing it restarts the exit.",
         "openfluxDebugOff": "Usual",
-        "openfluxDebugOn": "Detailed (sessions and errors)"
+        "openfluxDebugOn": "Detailed (sessions and errors)",
+        "olcrtcForkNote": "SaluteJazz, VK Calls and MTS Link need the olcRTC core of the ghostlane-project fork. Install the Better olcRTC plugin: it makes the panel download that core (Settings → Cores). On the original core these providers do not start.",
+        "olcrtcWbDatachannelNote": "WB Stream carries datachannel only with an account token (Advanced → Account token); a guest can use vp8channel, seichannel or videochannel.",
+        "olcrtcDefault": "Core default",
+        "olcrtcZeroDefaultHint": "0 = the core's own default.",
+        "olcrtcDurationHint": "A duration such as 10s or 5ms. Empty = the core's own default.",
+        "olcrtcVideoQrSize": "QR fragment (bytes)",
+        "olcrtcVideoQrSizeHint": "Bytes per QR fragment; 0 = automatic.",
+        "olcrtcVideoQrRecovery": "QR error correction",
+        "olcrtcVideoTileModule": "Tile module (px)",
+        "olcrtcVideoTileRs": "Tile Reed–Solomon (%)",
+        "olcrtcNoLinkName": "Leave the name out of the link",
+        "olcrtcNoLinkNameHint": "The olcrtc:// link ends with $name (this inbound's name), which clients that follow the olcrtc URI convention show as the server's name. Turn this on for a client that rejects it.",
+        "olcrtcAdvanced": "Advanced (ghostlane-project fork)",
+        "olcrtcAuthToken": "Account token",
+        "olcrtcAuthTokenHint": "Optional. A pre-issued account token of the provider (a WB Stream moderator token makes datachannel work there). Empty = join as a guest.",
+        "olcrtcExtraKeys": "Extra keys",
+        "olcrtcExtraKeysHint": "Optional, 64 hex chars each. The server accepts the main key and these, so each person can have a key of their own. The inbound's link carries the main key only.",
+        "olcrtcDtlsProfile": "DTLS profile",
+        "olcrtcDtlsProfileHint": "A fixed ClientHello of the handshake (Chrome 138). Core default = the stock handshake.",
+        "olcrtcUdp": "UDP relay",
+        "olcrtcUdpHint": "The lossy SOCKS5 UDP relay (calls, games). Off by default; the client has to turn it on too.",
+        "olcrtcUdpMaxFlows": "UDP flows (max)",
+        "olcrtcLivenessInterval": "Liveness interval",
+        "olcrtcLivenessTimeout": "Liveness timeout",
+        "olcrtcLivenessFailures": "Liveness failures",
+        "olcrtcMaxSessionDuration": "Rebuild the session every",
+        "olcrtcMaxSessionDurationHint": "A planned rebuild of the call session, such as 6h. Empty = never.",
+        "olcrtcTrafficMaxPayload": "Max message size (bytes)",
+        "olcrtcTrafficMinDelay": "Min send delay",
+        "olcrtcTrafficMaxDelay": "Max send delay",
+        "olcrtcTrafficHint": "Traffic shaping; use the same value on both sides. Empty / 0 = none."
       }
     },
     "plugins": {

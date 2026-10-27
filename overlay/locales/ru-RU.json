@@ -9,6 +9,7 @@
   "pages": {
     "inbounds": {
       "form": {
+        "olcrtcRoomIdHint": "Jitsi: полный URL комнаты. Telemost / WB Stream: id комнаты. SaluteJazz: code:password. VK Calls: https://vk.ru/call/join/… . MTS Link: https://my.mts-link.ru/j/owner/event",
         "csqttSingleNote": "Один CSQTT inbound на хост — второй не стартует. Один пароль = одно устройство; с плагином Better CSQTT каждый клиент получает свой пароль, он выдаётся автоматически, поэтому один inbound обслуживает многих людей. Бинарь — Settings → Cores. Клиенты: CSQTT Android APK или iOS anton48 (режим CSQTT, не WRAP-A).",
         "openfluxNote": "OpenFlux exit. Одна ссылка, один активный клиент. Новый пользователь = новый inbound (свой порт и URL канала). Direct слушает порт inbound. URL Яндекса, Volga, Board, Телемоста, Mail.ru, Cups или Avito — дополнительные каналы; несколько ссылок одного канала образуют группу. Volga, Board, Telemost, Avito и l3 требуют OpenFlux v0.13 или новее: его ставит плагин Better OpenFlux. Бинарь — Settings → Cores.",
         "openfluxUrlHint": "Необязательно. Несколько ссылок — по одной в строке или через запятую (они образуют группу). Без # и ; в ссылке — парсер конфига exit режет их.",
@@ -24,7 +25,38 @@
         "openfluxDebug": "Лог выхода",
         "openfluxDebugHint": "Подробный: выход пишет ещё сессии, носители, рукопожатия и ошибки, так что клиент, который не может подключиться, виден в логе панели (Settings → Cores → OpenFlux или журнал сервиса). Смена перезапускает выход.",
         "openfluxDebugOff": "Обычный",
-        "openfluxDebugOn": "Подробный (сессии и ошибки)"
+        "openfluxDebugOn": "Подробный (сессии и ошибки)",
+        "olcrtcForkNote": "SaluteJazz, VK Calls и MTS Link работают только на ядре olcRTC из форка ghostlane-project. Поставьте плагин Better olcRTC: он заставит панель скачать это ядро (Настройки → Cores). На оригинальном ядре эти провайдеры не запустятся.",
+        "olcrtcWbDatachannelNote": "WB Stream отдаёт datachannel только с токеном аккаунта (Дополнительно → Токен аккаунта); гостю подойдут vp8channel, seichannel и videochannel.",
+        "olcrtcDefault": "По умолчанию ядра",
+        "olcrtcZeroDefaultHint": "0 = значение ядра по умолчанию.",
+        "olcrtcDurationHint": "Длительность вроде 10s или 5ms. Пусто = значение ядра по умолчанию.",
+        "olcrtcVideoQrSize": "Фрагмент QR (байт)",
+        "olcrtcVideoQrSizeHint": "Байт на фрагмент QR; 0 = автоматически.",
+        "olcrtcVideoQrRecovery": "Коррекция ошибок QR",
+        "olcrtcVideoTileModule": "Модуль плитки (px)",
+        "olcrtcVideoTileRs": "Reed–Solomon плитки (%)",
+        "olcrtcNoLinkName": "Не добавлять имя в ссылку",
+        "olcrtcNoLinkNameHint": "Ссылка olcrtc:// заканчивается на $имя (название этого inbound) — клиенты, следующие соглашению об olcrtc URI, показывают его как имя сервера. Включите, если клиент такую ссылку не принимает.",
+        "olcrtcAdvanced": "Дополнительно (форк ghostlane-project)",
+        "olcrtcAuthToken": "Токен аккаунта",
+        "olcrtcAuthTokenHint": "Необязательно. Заранее выданный токен аккаунта провайдера (токен модератора WB Stream включает datachannel). Пусто = вход гостем.",
+        "olcrtcExtraKeys": "Дополнительные ключи",
+        "olcrtcExtraKeysHint": "Необязательно, по 64 hex-символа. Сервер принимает основной ключ и эти, так что у каждого человека может быть свой ключ. В ссылке inbound — только основной ключ.",
+        "olcrtcDtlsProfile": "Профиль DTLS",
+        "olcrtcDtlsProfileHint": "Фиксированный ClientHello рукопожатия (Chrome 138). По умолчанию ядра = обычное рукопожатие.",
+        "olcrtcUdp": "UDP-ретранслятор",
+        "olcrtcUdpHint": "SOCKS5 UDP-ретранслятор без гарантий доставки (звонки, игры). По умолчанию выключен; клиент тоже должен его включить.",
+        "olcrtcUdpMaxFlows": "UDP-потоков (макс.)",
+        "olcrtcLivenessInterval": "Интервал проверки связи",
+        "olcrtcLivenessTimeout": "Таймаут проверки связи",
+        "olcrtcLivenessFailures": "Допустимо пропусков",
+        "olcrtcMaxSessionDuration": "Пересобирать сессию каждые",
+        "olcrtcMaxSessionDurationHint": "Плановая пересборка сессии звонка, например 6h. Пусто = никогда.",
+        "olcrtcTrafficMaxPayload": "Макс. размер сообщения (байт)",
+        "olcrtcTrafficMinDelay": "Мин. задержка отправки",
+        "olcrtcTrafficMaxDelay": "Макс. задержка отправки",
+        "olcrtcTrafficHint": "Формирование трафика; на обеих сторонах одно и то же. Пусто / 0 = нет."
       }
     },
     "plugins": {
