@@ -46,6 +46,14 @@ func TestAllowAPIFollowsThePermissionsHeld(t *testing.T) {
 		{[]string{"api:openflux:write"}, http.MethodPost, "/tunnel/openflux/deleteBinary", true},
 		{[]string{"api:openflux:write"}, http.MethodGet, "/tunnel/openflux/status", false},
 		{[]string{"api:openflux:write", "api:openflux:read"}, http.MethodPost, "/tunnel/openflux/upload", false},
+		{[]string{"api:olcrtc:write"}, http.MethodPost, "/tunnel/olcrtc/download", true},
+		{[]string{"api:olcrtc:write"}, http.MethodPost, "/tunnel/olcrtc/deleteBinary", true},
+		{[]string{"api:olcrtc:write"}, http.MethodGet, "/tunnel/olcrtc/status", false},
+		{[]string{"api:olcrtc:write", "api:cores:read"}, http.MethodGet, "/tunnel/olcrtc/status", true},
+		{[]string{"api:olcrtc:write", "api:cores:read"}, http.MethodPost, "/tunnel/olcrtc/upload", false},
+		{[]string{"api:olcrtc:write", "api:cores:read"}, http.MethodGet, "/tunnel/olcrtc/logs", false},
+		{[]string{"api:olcrtc:write"}, http.MethodPost, "/tunnel/mieru/download", false},
+		{[]string{"api:olcrtc:write"}, http.MethodPost, "/tunnel/openflux/download", false},
 		{[]string{"api:cores:read"}, http.MethodGet, "/tunnel/mieru/status", true},
 		{[]string{"api:cores:read"}, http.MethodGet, "/tunnel/openflux/status", false},
 		{[]string{"api:cores:read"}, http.MethodGet, "/tunnel/mieru/logs", false},
@@ -111,7 +119,7 @@ func TestAllowAPINeverReachesPrivilegedRoutes(t *testing.T) {
 func TestAPIPolicyIsWellFormed(t *testing.T) {
 	prefix := map[string]string{
 		"clients": "/clients", "inbounds": "/inbounds", "hosts": "/hosts", "nodes": "/nodes",
-		"server": "/server", "xray": "/xray", "settings": "/setting", "openflux": "/tunnel/openflux", "cores": "/tunnel",
+		"server": "/server", "xray": "/xray", "settings": "/setting", "openflux": "/tunnel/openflux", "cores": "/tunnel", "olcrtc": "/tunnel/olcrtc",
 	}
 	seen := map[string]string{}
 	for perm, routes := range apiPolicy {
@@ -140,8 +148,8 @@ func TestAPIPolicyIsWellFormed(t *testing.T) {
 	}
 	for resource := range prefix {
 		for _, mode := range []string{"read", "write"} {
-			if resource == "cores" && mode == "write" {
-				continue // read only
+			if (resource == "cores" && mode == "write") || (resource == "olcrtc" && mode == "read") {
+				continue // cores is read only; olcrtc is write only (its status is api:cores:read)
 			}
 			if _, ok := apiPolicy["api:"+resource+":"+mode]; !ok {
 				t.Errorf("no policy for api:%s:%s although the grammar accepts it", resource, mode)
@@ -151,7 +159,7 @@ func TestAPIPolicyIsWellFormed(t *testing.T) {
 }
 
 func TestSensitiveAPIPermissionsAreDangerous(t *testing.T) {
-	for _, p := range []string{"api:settings:read", "api:settings:write", "api:nodes:read", "api:nodes:write", "api:clients:write", "api:openflux:write"} {
+	for _, p := range []string{"api:settings:read", "api:settings:write", "api:nodes:read", "api:nodes:write", "api:clients:write", "api:openflux:write", "api:olcrtc:write"} {
 		if !IsDangerousPermission(p) {
 			t.Errorf("%s exposes secrets or controls other servers and must be flagged", p)
 		}
