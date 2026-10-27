@@ -134,6 +134,9 @@ var nodeSyncScopeAllow = map[string]map[string]struct{}{
 	"/server/clientIps":            {http.MethodGet: {}, http.MethodPost: {}},
 	"/clients/clientIpsByGuid":     {http.MethodPost: {}},
 	"/hosts/list":                  {http.MethodGet: {}},
+	// LUCX-HOOK: node cert/site/port check for tproxy, cover, anytls, trusttunnel
+	"/tunnel/hostCheck": {http.MethodPost: {}},
+	// END LUCX-HOOK
 	// LUCX-HOOK: capability probe (nodeType, features incl. plugins) with the enrollment token.
 	"/lucx/hello": {http.MethodGet: {}},
 	// END LUCX-HOOK
