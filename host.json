@@ -1,18 +1,18 @@
 {
   "schema": 1,
-  "sequence": 7,
-  "generatedAt": "2026-10-25T14:58:43Z",
-  "version": "host-6",
+  "sequence": 8,
+  "generatedAt": "2026-10-27T18:22:13Z",
+  "version": "host-7",
   "binaries": [
     {
       "arch": "amd64",
-      "url": "https://github.com/AllIsA1/lucx-plugins/releases/download/host-6/lucx-plugin-host-linux-amd64",
-      "sha256": "848cf12e2ec91ec16f7a4368b03d1cbddf77a1f24d23879ed294bd85ec539225"
+      "url": "https://github.com/AllIsA1/lucx-plugins/releases/download/host-7/lucx-plugin-host-linux-amd64",
+      "sha256": "ea8fe9c9f59e1db212bef02791ec19b142b8414a3fe8cea6731f8a60f0f319b5"
     },
     {
       "arch": "arm64",
-      "url": "https://github.com/AllIsA1/lucx-plugins/releases/download/host-6/lucx-plugin-host-linux-arm64",
-      "sha256": "ef609295a4acbaa93aab3f8380d1c7ca5e64e14637d97f6ca66395dbcd6901ee"
+      "url": "https://github.com/AllIsA1/lucx-plugins/releases/download/host-7/lucx-plugin-host-linux-arm64",
+      "sha256": "02ff472560fe44bd7c7e43607ffa5cc7ac4fd660eefc49d854af712f60027ac6"
     }
   ]
 }
