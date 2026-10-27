@@ -183,6 +183,22 @@ export const pluginsApi = {
       { permissions },
       JSON_HEADERS,
     ),
+  // The plugin system of a node: what it runs and whether a newer release is ready (the node's own answer).
+  nodeSystem: async (nodeId: number): Promise<Msg<PluginSystem>> => {
+    const raw = await HttpUtil.get<PluginSystem>(`${BASE}/nodes/${nodeId}/system`, undefined, {
+      silent: true,
+    });
+    return parseMsg(raw, PluginSystemSchema, 'plugins/nodeSystem');
+  },
+  nodeSystemCheck: (nodeId: number): Promise<Msg<null>> =>
+    HttpUtil.post<null>(`${BASE}/nodes/${nodeId}/system/check`, {}, JSON_HEADERS),
+  // Without a part the node updates its plugin system service; with 'panel' its panel's plugin build, which restarts the node's panel.
+  nodeSystemUpdate: (nodeId: number, part?: 'panel'): Promise<Msg<null>> =>
+    HttpUtil.post<null>(
+      `${BASE}/nodes/${nodeId}/system/update`,
+      part ? { part } : {},
+      JSON_HEADERS,
+    ),
   nodeRestart: (nodeId: number, id: string): Promise<Msg<null>> =>
     HttpUtil.post<null>(
       `${BASE}/nodes/${nodeId}/restart/${encodeURIComponent(id)}`,

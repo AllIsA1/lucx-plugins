@@ -79,6 +79,7 @@ export const keys = {
     updatePreview: (id: string, ref: string) => ['plugins', 'update-preview', id, ref] as const,
     logs: (id: string) => ['plugins', 'logs', id] as const,
     nodes: () => ['plugins', 'nodes'] as const,
+    nodeSystem: (nodeId: number) => ['plugins', 'nodes', nodeId, 'system'] as const,
     nodeLogs: (nodeId: number, id: string) => ['plugins', 'nodes', nodeId, 'logs', id] as const,
   },
   // END LUCX-HOOK

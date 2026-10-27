@@ -41,6 +41,8 @@ var (
 	ErrReplaceConflict     = errors.New("another plugin already replaces that page")
 	ErrRequirementMissing  = errors.New("a plugin this one requires is not installed and turned on")
 	ErrRequiredBy          = errors.New("other plugins need this one")
+	ErrNotMasterManaged    = errors.New("the plugin was installed on this node by hand and is not managed by the master")
+	ErrAlreadyCurrent      = errors.New("the plugin already runs that commit")
 )
 
 // Config wires a Manager to the filesystem, the network and the panel version.
@@ -442,33 +444,43 @@ type PinnedInstall struct {
 // and marked as master-managed, only if the manifest hash, the permission set
 // and the scope are what the master approved. Nothing is trusted on its word.
 func (m *Manager) InstallPinned(ctx context.Context, req PinnedInstall) (Entry, error) {
+	p, err := m.stagePinned(ctx, req)
+	if err != nil {
+		return Entry{}, err
+	}
+	return m.install(p.Token, req.Permissions, true)
+}
+
+// stagePinned downloads the pinned commit and keeps it staged only if the manifest hash and the scope are what the
+// master approved; the caller installs or applies it (the token), or the staging is dropped here.
+func (m *Manager) stagePinned(ctx context.Context, req PinnedInstall) (*Preview, error) {
 	commit := strings.TrimSpace(req.Commit)
 	if !shaPattern.MatchString(commit) {
-		return Entry{}, errors.New("commit must be a full lowercase SHA: a branch or tag can move")
+		return nil, errors.New("commit must be a full lowercase SHA: a branch or tag can move")
 	}
 	src, err := ParseSource(req.URL)
 	if err != nil {
-		return Entry{}, err
+		return nil, err
 	}
 	src.Ref = commit
 	p, err := m.Preview(ctx, src.String())
 	if err != nil {
-		return Entry{}, err
+		return nil, err
 	}
 	m.mu.Lock()
 	staged := m.staged[p.Token]
 	m.mu.Unlock()
 	switch {
 	case staged == nil:
-		return Entry{}, ErrUnknownToken
+		return nil, ErrUnknownToken
 	case !strings.EqualFold(staged.manifestSHA256, strings.TrimSpace(req.ManifestSHA256)):
 		m.discard(p.Token)
-		return Entry{}, ErrManifestMismatch
+		return nil, ErrManifestMismatch
 	case p.Manifest.Scope != ScopeNode && p.Manifest.Scope != ScopeBoth:
 		m.discard(p.Token)
-		return Entry{}, fmt.Errorf("%w: scope is %q", ErrScopeNotAllowed, p.Manifest.Scope)
+		return nil, fmt.Errorf("%w: scope is %q", ErrScopeNotAllowed, p.Manifest.Scope)
 	}
-	return m.install(p.Token, req.Permissions, true)
+	return p, nil
 }
 
 // TakePin turns a previewed plugin into what a node must install: this panel never installs it, it only vouches for

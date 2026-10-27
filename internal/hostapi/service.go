@@ -413,6 +413,21 @@ func (s *PluginService) IsManagedByMaster(id string) bool {
 	return false
 }
 
+// UpdatePinned moves a plugin the master manages to exactly the commit, manifest and permissions the master approved,
+// in place (the plugin is not removed first, so plugins that require it stay), with the rollback an ordinary update has
+// when the new process does not become healthy.
+func (s *PluginService) UpdatePinned(ctx context.Context, req plugins.PinnedInstall) (plugins.Entry, error) {
+	m, err := s.Provider()
+	if err != nil {
+		return plugins.Entry{}, err
+	}
+	id, token, err := m.StagePinnedUpdate(ctx, req)
+	if err != nil {
+		return plugins.Entry{}, err
+	}
+	return s.ApplyUpdate(ctx, id, token, req.Permissions)
+}
+
 // InstallPinned installs exactly the commit, manifest and permissions a master approved.
 func (s *PluginService) InstallPinned(ctx context.Context, req plugins.PinnedInstall) (plugins.Entry, error) {
 	m, err := s.Provider()

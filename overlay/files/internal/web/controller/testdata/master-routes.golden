@@ -1,7 +1,11 @@
 GET /panel/api/plugins/list
 GET /panel/api/plugins/logs/:id
+GET /panel/api/plugins/system
 POST /panel/api/plugins/disable/:id
 POST /panel/api/plugins/enable/:id
 POST /panel/api/plugins/remote/install
+POST /panel/api/plugins/remote/update
 POST /panel/api/plugins/restart/:id
+POST /panel/api/plugins/system/check
+POST /panel/api/plugins/system/update
 POST /panel/api/plugins/uninstall/:id

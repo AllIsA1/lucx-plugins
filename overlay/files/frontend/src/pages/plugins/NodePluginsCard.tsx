@@ -21,6 +21,7 @@ import {
   PlusOutlined,
   ReloadOutlined,
   SyncOutlined,
+  ToolOutlined,
 } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { TableColumnsType } from 'antd';
@@ -29,6 +30,7 @@ import { keys } from '@/api/queryKeys';
 import { pluginsApi, type NodePluginStatus, type PluginEntry } from '@/api/plugins';
 import type { NodePlugin } from '@/schemas/plugins';
 import NodeInstallModal from '@/pages/plugins/NodeInstallModal';
+import NodeSystemModal from '@/pages/plugins/NodeSystemModal';
 import NodeUpdateModal from '@/pages/plugins/NodeUpdateModal';
 import PluginLogsModal from '@/pages/plugins/PluginLogsModal';
 import PluginStatus from '@/pages/plugins/PluginStatus';
@@ -63,6 +65,7 @@ export default function NodePluginsCard({ masterPlugins, onToast }: Props) {
   const [logs, setLogs] = useState<Target | null>(null);
   const [removal, setRemoval] = useState<Target | null>(null);
   const [updating, setUpdating] = useState<Target | null>(null);
+  const [systemFor, setSystemFor] = useState<NodePluginStatus | null>(null);
   const [removeData, setRemoveData] = useState(true);
 
   const nodesQuery = useQuery({
@@ -241,7 +244,7 @@ export default function NodePluginsCard({ masterPlugins, onToast }: Props) {
     },
     {
       title: '',
-      width: 120,
+      width: 160,
       render: (_: unknown, n) => {
         const manageable = canManageNode(n);
         return (
@@ -256,6 +259,15 @@ export default function NodePluginsCard({ masterPlugins, onToast }: Props) {
                 onClick={() =>
                   void run(`${n.nodeId}:refresh`, () => pluginsApi.nodeRefresh(n.nodeId))
                 }
+              />
+            </Tooltip>
+            <Tooltip title={t('pages.plugins.nodes.system.button')}>
+              <Button
+                type="text"
+                aria-label={t('pages.plugins.nodes.system.button')}
+                icon={<ToolOutlined />}
+                disabled={!manageable}
+                onClick={() => setSystemFor(n)}
               />
             </Tooltip>
             <Tooltip title={t('pages.plugins.nodes.install')}>
@@ -319,6 +331,18 @@ export default function NodePluginsCard({ masterPlugins, onToast }: Props) {
           onInstalled={() => {
             setInstallFor(null);
             onToast(t('pages.plugins.nodes.installedToast'));
+            reload();
+          }}
+        />
+      )}
+      {systemFor && (
+        <NodeSystemModal
+          key={systemFor.nodeId}
+          nodeId={systemFor.nodeId}
+          nodeName={systemFor.nodeName}
+          onClose={() => setSystemFor(null)}
+          onDone={() => {
+            onToast(t('pages.plugins.nodes.system.done'));
             reload();
           }}
         />

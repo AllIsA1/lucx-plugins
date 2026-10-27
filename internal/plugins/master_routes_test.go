@@ -17,6 +17,10 @@ func TestMasterRoutesAreTheNarrowSetANodeOffers(t *testing.T) {
 		{"POST", "/plugins/uninstall/:id"},
 		{"POST", "/plugins/restart/:id"},
 		{"GET", "/plugins/logs/:id"},
+		{"POST", "/plugins/remote/update"},
+		{"GET", "/plugins/system"},
+		{"POST", "/plugins/system/check"},
+		{"POST", "/plugins/system/update"},
 		{"HEAD", "/plugins/list"},
 	}
 	for _, r := range allowed {
@@ -33,6 +37,11 @@ func TestMasterRoutesAreTheNarrowSetANodeOffers(t *testing.T) {
 		{"POST", "/plugins/x/:id/*path"},
 		{"DELETE", "/plugins/x/:id/*path"},
 		{"GET", "/plugins/remote/install"},
+		{"GET", "/plugins/remote/update"},
+		{"POST", "/plugins/system"},
+		{"GET", "/plugins/system/update"},
+		{"POST", "/plugins/rollback/:id"},
+		{"POST", "/plugins/update/:id"},
 		{"GET", "/plugins/enable/:id"},
 		{"POST", "/plugins/list"},
 		{"POST", "/plugins/enable/alerts"},

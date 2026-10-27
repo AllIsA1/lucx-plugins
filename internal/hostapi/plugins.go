@@ -48,6 +48,7 @@ func NewPluginsController(g *gin.RouterGroup, svc *PluginService) *PluginsContro
 	g.POST("/preview", a.preview)
 	g.POST("/install", a.install)
 	g.POST("/remote/install", a.remoteInstall)
+	g.POST("/remote/update", a.remoteUpdate)
 	g.POST("/master-management", a.masterManagement)
 	g.POST("/enable/:id", a.enable)
 	g.POST("/disable/:id", a.disable)
@@ -127,6 +128,32 @@ func (a *PluginsController) remoteInstall(c *gin.Context) {
 	})
 	if err != nil {
 		jsonMsg(c, "plugins: install failed", err)
+		return
+	}
+	jsonObj(c, entry, nil)
+}
+
+// remoteUpdate moves a plugin the master manages to the commit the master pinned, in place.
+func (a *PluginsController) remoteUpdate(c *gin.Context) {
+	var body struct {
+		URL            string   `json:"url"`
+		Commit         string   `json:"commit"`
+		ManifestSHA256 string   `json:"manifestSha256"`
+		Permissions    []string `json:"permissions"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		jsonMsg(c, "plugins: invalid update body", err)
+		return
+	}
+	extendWriteDeadline(c, pluginPreviewTimeout+pluginSlack)
+	// The master gives up after 15 s; the download and the swap it started must still finish.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(c.Request.Context()), pluginPreviewTimeout)
+	defer cancel()
+	entry, err := a.svc.UpdatePinned(ctx, plugins.PinnedInstall{
+		URL: body.URL, Commit: body.Commit, ManifestSHA256: body.ManifestSHA256, Permissions: body.Permissions,
+	})
+	if err != nil {
+		jsonMsg(c, "plugins: update failed", err)
 		return
 	}
 	jsonObj(c, entry, nil)

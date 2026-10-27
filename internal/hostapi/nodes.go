@@ -5,10 +5,12 @@ package hostapi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -120,6 +122,13 @@ func (e *NodeRefusal) Error() string { return e.Msg }
 type NodePluginsClient interface {
 	PluginsList(ctx context.Context) (*NodePluginsState, error)
 	PluginsInstall(ctx context.Context, req NodePluginInstall) error
+	// PluginsUpdate moves an installed plugin to the pinned commit in place.
+	PluginsUpdate(ctx context.Context, req NodePluginInstall) error
+	// SystemState is the node's own plugin-system state (the answer of its /plugins/system, passed on as it is).
+	SystemState(ctx context.Context) (json.RawMessage, error)
+	SystemCheck(ctx context.Context) error
+	// SystemUpdate updates the node's plugin system; part "panel" updates the node's plugin build of the panel.
+	SystemUpdate(ctx context.Context, part string) error
 	PluginsSetEnabled(ctx context.Context, id string, enabled bool) error
 	PluginsUninstall(ctx context.Context, id string, removeData bool) error
 	PluginsRestart(ctx context.Context, id string) error
@@ -403,6 +412,12 @@ func (s *NodePluginsService) Update(ctx context.Context, nodeID int, pluginID st
 	wasEnabled := current.Enabled
 	defer s.finish(ctx, n)
 
+	// In place: the plugin is not removed first, which a plugin that others require would not allow. A node whose
+	// plugin system does not have the route yet is updated the old way (remove, install, turn on).
+	err = step(func(c context.Context) error { return client.PluginsUpdate(c, req) })
+	if err == nil || !routeMissing(err) {
+		return err
+	}
 	if err := step(func(c context.Context) error { return client.PluginsUninstall(c, pluginID, false) }); err != nil {
 		return err
 	}
@@ -415,6 +430,68 @@ func (s *NodePluginsService) Update(ctx context.Context, nodeID int, pluginID st
 		}
 	}
 	return nil
+}
+
+// routeMissing says whether a node refused a call because its plugin system does not have that route (yet).
+func routeMissing(err error) bool {
+	var refusal *NodeRefusal
+	if !errors.As(err, &refusal) {
+		return false
+	}
+	return refusal.Status == http.StatusNotFound ||
+		(refusal.Status == http.StatusForbidden && strings.Contains(refusal.Msg, "not available to a master panel"))
+}
+
+// System reads the plugin-system state of a node.
+func (s *NodePluginsService) System(ctx context.Context, nodeID int) (json.RawMessage, error) {
+	_, client, err := s.target(ctx, nodeID)
+	if err != nil {
+		return nil, err
+	}
+	cctx, cancel := context.WithTimeout(ctx, nodePluginsTimeout)
+	defer cancel()
+	obj, err := client.SystemState(cctx)
+	return obj, slowOr(err)
+}
+
+// SystemCheck makes a node look for a newer plugin system and plugin build of its panel.
+func (s *NodePluginsService) SystemCheck(ctx context.Context, nodeID int) error {
+	_, client, err := s.target(ctx, nodeID)
+	if err != nil {
+		return err
+	}
+	cctx, cancel := context.WithTimeout(ctx, nodePluginsTimeout)
+	defer cancel()
+	return slowOr(client.SystemCheck(cctx))
+}
+
+// SystemUpdate updates a node's plugin system, or with part "panel" the node's plugin build of the panel. The node
+// restarts its service (or its panel) a moment after it answers, so a call that is cut off by that is not a failure:
+// the caller reads the node's state to see the outcome. The node's refusals are reported as they are.
+func (s *NodePluginsService) SystemUpdate(ctx context.Context, nodeID int, part string) error {
+	if part != "" && part != "panel" {
+		return fmt.Errorf("unknown part %q", part)
+	}
+	n, client, err := s.target(ctx, nodeID)
+	if err != nil {
+		return err
+	}
+	cctx, cancel := context.WithTimeout(ctx, nodePluginsTimeout)
+	defer cancel()
+	err = client.SystemUpdate(cctx, part)
+	if err == nil {
+		return nil
+	}
+	var refusal *NodeRefusal
+	if errors.As(err, &refusal) {
+		return err
+	}
+	if part == "panel" {
+		// The panel went away under the call, as it does when it restarts onto the new build.
+		s.refresh(ctx, n)
+		return nil
+	}
+	return slowOr(err)
 }
 
 // Refresh re-reads one node at once instead of waiting for the next poll.

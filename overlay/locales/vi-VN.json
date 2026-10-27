@@ -183,13 +183,28 @@
           "note": "Plugin được gỡ khỏi node rồi cài lại ở phiên bản của panel này. Nó dừng trong chốc lát, dữ liệu được giữ nguyên và không có hoàn nguyên tự động: nếu không cài được phiên bản mới, node sẽ không còn plugin.",
           "accept": "Tôi chấp nhận các quyền được thêm trên {node}",
           "apply": "Cập nhật trên node",
-          "done": "Đã cập nhật plugin trên node"
+          "done": "Đã cập nhật plugin trên node",
+          "failed": "The plugin could not be updated on the node."
         },
         "fromPanel": "Installed on this panel",
         "fromLink": "By link",
         "linkLabel": "Plugin repository link",
         "masterOnly": "This plugin is made for the master panel only and cannot run on a node.",
-        "linkNote": "This panel only checks the plugin and does not install it. The node downloads this exact version itself and refuses it if anything differs. The plugin is installed disabled."
+        "linkNote": "This panel only checks the plugin and does not install it. The node downloads this exact version itself and refuses it if anything differs. The plugin is installed disabled.",
+        "system": {
+          "button": "Plugin system of this node",
+          "title": "Plugin system · {{node}}",
+          "desc": "The plugin system service and the panel's plugin build on this node. The node updates itself from the signed releases it already trusts; this panel names no file. The service restarts first, then the node's panel.",
+          "close": "Close",
+          "updatingHost": "The node is updating its plugin system to {{version}}…",
+          "updatingPanel": "The node is updating its panel build to {{release}} and restarting…",
+          "timeout": "The node did not come back as the new release in time. Check its state shortly; it may still be restarting.",
+          "panelTimeout": "The node's panel did not come back on the new build in time. Check its state shortly; it may still be restarting.",
+          "failed": "The node refused the update.",
+          "unavailable": "The node's plugin system did not answer. It may be an older release without this feature: update it once on the node itself.",
+          "notManaged": "This node's plugin system does not update itself.",
+          "done": "The node is up to date."
+        }
       },
       "frame": {
         "unavailable": "Trang của plugin không khả dụng",

@@ -6,13 +6,15 @@ package plugins
 import "net/http"
 
 // masterRoutes is everything a master panel may call on a node's plugin API,
-// once the node owner allowed it: list, install a pinned plugin, and control
-// plugins the master itself installed. Nothing that edits settings, previews,
-// installs from a token or reaches into a plugin's own API is here.
+// once the node owner allowed it: list, install or update a pinned plugin, control
+// plugins the master itself installed, and update the node's plugin system from the
+// signed releases the node already trusts (the master names no file and no address).
+// Nothing that edits settings, previews, installs from a token or reaches into a
+// plugin's own API is here.
 var masterRoutes = join(
-	get("/plugins/list", "/plugins/logs/:id"),
-	post("/plugins/remote/install", "/plugins/enable/:id", "/plugins/disable/:id",
-		"/plugins/uninstall/:id", "/plugins/restart/:id"),
+	get("/plugins/list", "/plugins/logs/:id", "/plugins/system"),
+	post("/plugins/remote/install", "/plugins/remote/update", "/plugins/enable/:id", "/plugins/disable/:id",
+		"/plugins/uninstall/:id", "/plugins/restart/:id", "/plugins/system/check", "/plugins/system/update"),
 )
 
 // AllowMasterRoute reports whether a master panel may call the route. pattern is

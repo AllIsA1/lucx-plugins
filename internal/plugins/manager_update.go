@@ -269,3 +269,26 @@ func (m *Manager) Rollback(ctx context.Context, id string) (Entry, error) {
 	logx.Infof("plugins: rolled %s back to %s (%s)", id, next.Version, next.Commit)
 	return next, nil
 }
+
+// StagePinnedUpdate downloads the commit a master pinned for a plugin it manages here and checks it like an install
+// does. It returns the plugin's id and the staging token to give ApplyUpdate, so the update replaces the code in place:
+// the plugin is not removed first, which other plugins that require it would not allow.
+func (m *Manager) StagePinnedUpdate(ctx context.Context, req PinnedInstall) (id, token string, err error) {
+	p, err := m.stagePinned(ctx, req)
+	if err != nil {
+		return "", "", err
+	}
+	entry, ok := m.reg.Get(p.Manifest.ID)
+	switch {
+	case !ok:
+		m.discard(p.Token)
+		return "", "", ErrNotFound
+	case !entry.ManagedByMaster:
+		m.discard(p.Token)
+		return "", "", ErrNotMasterManaged
+	case entry.Commit == p.Commit:
+		m.discard(p.Token)
+		return "", "", ErrAlreadyCurrent
+	}
+	return entry.ID, p.Token, nil
+}

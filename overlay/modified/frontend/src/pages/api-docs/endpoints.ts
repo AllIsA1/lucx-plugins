@@ -1682,6 +1682,33 @@ export const sections: readonly Section[] = [
       },
       {
         method: 'POST',
+        path: '/panel/api/plugins/remote/update',
+        summary:
+          "Move a plugin to exactly the commit a master panel pinned, in place. The node downloads the commit itself and refuses unless the manifest hash, the permission set and the scope (node or both) match, the plugin is installed on the node, was installed by the master and does not already run that commit. The plugin's data and on/off state stay, and the update is undone when the new process does not become healthy. Master panels can call this only after the node owner allowed master management. LucX-UI only.",
+        params: [
+          {
+            name: 'url',
+            in: 'body (json)',
+            type: 'string',
+            desc: 'https://github.com/<owner>/<repo>.',
+          },
+          { name: 'commit', in: 'body (json)', type: 'string', desc: 'Full lowercase commit SHA.' },
+          {
+            name: 'manifestSha256',
+            in: 'body (json)',
+            type: 'string',
+            desc: 'SHA-256 of lucx-plugin.json at that commit.',
+          },
+          {
+            name: 'permissions',
+            in: 'body (json)',
+            type: 'string[]',
+            desc: 'Exactly the permissions of the new manifest.',
+          },
+        ],
+      },
+      {
+        method: 'POST',
         path: '/panel/api/plugins/remote/install',
         summary:
           'Install a plugin on a node exactly as a master panel approved it. The node downloads the pinned commit itself and refuses unless the manifest hash, the permission set and the scope (node or both) match; the plugin is installed disabled and marked as master-managed. Master panels (node-sync scope or a verified node certificate) can call this only after the node owner allowed master management. LucX-UI only.',
@@ -1718,7 +1745,7 @@ export const sections: readonly Section[] = [
         method: 'POST',
         path: '/panel/api/plugins/master-management',
         summary:
-          'Let a master panel install and control plugins on this node (off by default), or revoke that. Only the node owner can call it: master panels cannot. While it is off every master call to the plugin API answers 403. A master can only ever use list, remote/install, enable, disable, uninstall, restart and logs, and only for plugins it installed itself. LucX-UI only.',
+          'Let a master panel install and control plugins on this node (off by default), or revoke that. Only the node owner can call it: master panels cannot. While it is off every master call to the plugin API answers 403. A master can only ever use list, remote/install, remote/update, enable, disable, uninstall, restart, logs and the system routes (system, system/check, system/update), and only for plugins it installed itself. LucX-UI only.',
         params: [
           {
             name: 'allow',
@@ -1786,7 +1813,7 @@ export const sections: readonly Section[] = [
         method: 'POST',
         path: '/panel/api/lucx/plugin-relay/:nodeId',
         summary:
-          "Internal. Carries one call of the plugin system to a node over this panel's own channel to that node (its credentials, TLS mode and egress rules). Reachable only on the plugin system's internal socket and only when the system names this route in its grant; a browser, an API token or a plugin gets 404 or 403. The call must be one of the few a master may make on a node's plugin API (list, logs, remote/install, enable, disable, uninstall, restart); anything else is refused without reaching the node. The node's own answer comes back with its status, marked with the header X-LucX-Relayed: node. LucX-UI only.",
+          "Internal. Carries one call of the plugin system to a node over this panel's own channel to that node (its credentials, TLS mode and egress rules). Reachable only on the plugin system's internal socket and only when the system names this route in its grant; a browser, an API token or a plugin gets 404 or 403. The call must be one of the few a master may make on a node's plugin API (list, logs, remote/install, remote/update, system, system/check, system/update, enable, disable, uninstall, restart); anything else is refused without reaching the node. The node's own answer comes back with its status, marked with the header X-LucX-Relayed: node. LucX-UI only.",
         params: [
           { name: 'nodeId', in: 'path', type: 'integer', desc: 'Node id.' },
           { name: 'method', in: 'body (json)', type: 'string', desc: 'GET or POST.' },
@@ -1960,7 +1987,7 @@ export const sections: readonly Section[] = [
         method: 'POST',
         path: '/panel/api/plugins/nodes/:nodeId/update/:id',
         summary:
-          "Move a plugin the master installed on a node to this panel's commit: the old one is removed (its data stays), the pinned commit from this panel's own record is installed and, if the plugin was on, turned on again. Refused before the node is touched when the permissions differ from this panel's, the plugin is not installed on the node, was installed there by hand, or already runs this commit. There is no automatic way back: a failure says whether the old version was removed and the new one not installed, or the new one is installed but off. The node must have allowed management by the master. LucX-UI only.",
+          "Move a plugin the master installed on a node to this panel's commit, in place (POST /panel/api/plugins/remote/update on the node): the plugin is not removed first, so one that other plugins require can be updated, its data and on/off state stay, and the node undoes the update when the new process does not become healthy. A node whose plugin system has no such route yet is updated the old way: the plugin is removed (its data stays), the pinned commit is installed and, if the plugin was on, turned on again; a failure there says whether the old version was removed and the new one not installed, or the new one is installed but off. Refused before the node is touched when the permissions differ from this panel's, the plugin is not installed on the node, was installed there by hand, or already runs this commit. The node must have allowed management by the master. LucX-UI only.",
         params: [
           { name: 'nodeId', in: 'path', type: 'integer', desc: 'Node id.' },
           { name: 'id', in: 'path', type: 'string', desc: 'Plugin id.' },
@@ -1969,6 +1996,35 @@ export const sections: readonly Section[] = [
             in: 'body (json)',
             type: 'string[]',
             desc: 'Exactly the permissions granted to the plugin on this panel.',
+          },
+        ],
+      },
+      {
+        method: 'GET',
+        path: '/panel/api/plugins/nodes/:nodeId/system',
+        summary:
+          "The plugin system of a node, as the node itself reports it (the same object as GET /panel/api/plugins/system): the release it runs, the newer one it found, and the panel's plugin build on the node. The node must have allowed management by the master. LucX-UI only.",
+        params: [{ name: 'nodeId', in: 'path', type: 'integer', desc: 'Node id.' }],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/plugins/nodes/:nodeId/system/check',
+        summary:
+          'Make a node look for a newer plugin system release and a newer plugin build of its panel (POST /panel/api/plugins/system/check on the node). The node reads its own signed lists; this panel names no file or address. The node must have allowed management by the master. LucX-UI only.',
+        params: [{ name: 'nodeId', in: 'path', type: 'integer', desc: 'Node id.' }],
+      },
+      {
+        method: 'POST',
+        path: '/panel/api/plugins/nodes/:nodeId/system/update',
+        summary:
+          'Make a node update its plugin system to the release it found (POST /panel/api/plugins/system/update on the node), or with {"part": "panel"} its panel\'s plugin build, which restarts the node\'s panel. The node verifies the signed hashes itself; this panel names no file or address. A call cut off by the node restarting under it is not a failure: read GET /panel/api/plugins/nodes/:nodeId/system. The node must have allowed management by the master. LucX-UI only.',
+        params: [
+          { name: 'nodeId', in: 'path', type: 'integer', desc: 'Node id.' },
+          {
+            name: 'part',
+            in: 'body (json)',
+            type: 'string',
+            desc: "Empty for the plugin system service, 'panel' for the panel's plugin build.",
           },
         ],
       },

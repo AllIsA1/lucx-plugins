@@ -6,6 +6,7 @@ GET /panel/api/plugins/logs/:id
 GET /panel/api/plugins/menu
 GET /panel/api/plugins/nodes
 GET /panel/api/plugins/nodes/:nodeId/logs/:id
+GET /panel/api/plugins/nodes/:nodeId/system
 GET /panel/api/plugins/system
 GET /panel/api/plugins/x/:id/*path
 GET /panel/plugin-frame/:token/*path
@@ -24,10 +25,13 @@ POST /panel/api/plugins/nodes/:nodeId/install
 POST /panel/api/plugins/nodes/:nodeId/install-link
 POST /panel/api/plugins/nodes/:nodeId/refresh
 POST /panel/api/plugins/nodes/:nodeId/restart/:id
+POST /panel/api/plugins/nodes/:nodeId/system/check
+POST /panel/api/plugins/nodes/:nodeId/system/update
 POST /panel/api/plugins/nodes/:nodeId/uninstall/:id
 POST /panel/api/plugins/nodes/:nodeId/update/:id
 POST /panel/api/plugins/preview
 POST /panel/api/plugins/remote/install
+POST /panel/api/plugins/remote/update
 POST /panel/api/plugins/restart/:id
 POST /panel/api/plugins/rollback/:id
 POST /panel/api/plugins/settings

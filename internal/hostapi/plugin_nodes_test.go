@@ -56,6 +56,27 @@ func (s *nodeClientSpy) PluginsInstall(_ context.Context, req NodePluginInstall)
 	return s.err
 }
 
+func (s *nodeClientSpy) PluginsUpdate(_ context.Context, req NodePluginInstall) error {
+	s.record("update")
+	s.installed = req
+	return s.err
+}
+
+func (s *nodeClientSpy) SystemState(context.Context) (json.RawMessage, error) {
+	s.record("system")
+	return json.RawMessage(`{"managed":true,"version":"host-6","available":"host-7"}`), s.err
+}
+
+func (s *nodeClientSpy) SystemCheck(context.Context) error {
+	s.record("system check")
+	return s.err
+}
+
+func (s *nodeClientSpy) SystemUpdate(_ context.Context, part string) error {
+	s.record("system update " + part)
+	return s.err
+}
+
 func (s *nodeClientSpy) PluginsSetEnabled(_ context.Context, id string, enabled bool) error {
 	s.record("enabled=" + strconv.FormatBool(enabled) + " " + id)
 	return s.err
@@ -175,6 +196,9 @@ func TestANodeCannotManagePluginsOnOtherNodes(t *testing.T) {
 		{http.MethodPost, base + "/enable/blockads"},
 		{http.MethodPost, base + "/update/blockads"},
 		{http.MethodGet, base + "/logs/blockads"},
+		{http.MethodGet, base + "/system"},
+		{http.MethodPost, base + "/system/check"},
+		{http.MethodPost, base + "/system/update"},
 	} {
 		if r := h.callAt(t, c.method, c.path, map[string]any{"id": "blockads", "permissions": []string{"network"}}); r.Success {
 			t.Errorf("%s %s must not be reachable by a master panel", c.method, c.path)
@@ -185,7 +209,7 @@ func TestANodeCannotManagePluginsOnOtherNodes(t *testing.T) {
 	}
 }
 
-func TestNodeUpdateRouteReinstallsThePinnedCommit(t *testing.T) {
+func TestNodeUpdateRouteMovesThePluginToThePinnedCommit(t *testing.T) {
 	h, spy, id := newPluginNodesHarness(t, "")
 	spy.listed = []NodePlugin{{ID: "blockads", Commit: strings.Repeat("f", 40), ManagedByMaster: true, Enabled: true}}
 	base := "/plugins/nodes/" + strconv.Itoa(id)
@@ -201,9 +225,9 @@ func TestNodeUpdateRouteReinstallsThePinnedCommit(t *testing.T) {
 	if r := h.callAt(t, http.MethodPost, base+"/update/blockads", map[string]any{"permissions": []string{"network"}}); !r.Success {
 		t.Fatalf("update: %s", r.Msg)
 	}
-	want := []string{"list", "uninstall data=false blockads", "install", "enabled=true blockads"}
+	want := []string{"list", "update"}
 	if got := spy.seen()[:len(want)]; strings.Join(got, "|") != strings.Join(want, "|") {
-		t.Errorf("node calls = %v, want %v first", spy.seen(), want)
+		t.Errorf("node calls = %v, want %v first: the plugin is updated in place, not removed", spy.seen(), want)
 	}
 	if spy.installed.Commit != pluginsTestCommit {
 		t.Errorf("installed %+v, want the master's commit", spy.installed)
@@ -287,5 +311,43 @@ func TestAPluginForThisPanelOnlyCannotBePutOnANode(t *testing.T) {
 	}
 	if len(spy.seen()) != 0 {
 		t.Errorf("the node was called: %v", spy.seen())
+	}
+}
+
+func TestNodeSystemRoutesDriveTheNodesPluginSystem(t *testing.T) {
+	h, spy, id := newPluginNodesHarness(t, "")
+	base := "/plugins/nodes/" + strconv.Itoa(id)
+
+	r := h.callAt(t, http.MethodGet, base+"/system", nil)
+	var view struct {
+		Version   string `json:"version"`
+		Available string `json:"available"`
+	}
+	if err := json.Unmarshal(r.Obj, &view); err != nil || !r.Success || view.Version != "host-6" || view.Available != "host-7" {
+		t.Fatalf("system = %+v (%v) %s", r, err, r.Obj)
+	}
+	for _, st := range []struct {
+		path string
+		body any
+		want string
+	}{
+		{base + "/system/check", nil, "system check"},
+		{base + "/system/update", nil, "system update "},
+		{base + "/system/update", map[string]string{"part": "panel"}, "system update panel"},
+	} {
+		spy.reset()
+		if r := h.callAt(t, http.MethodPost, st.path, st.body); !r.Success {
+			t.Fatalf("%s: %s", st.path, r.Msg)
+		}
+		if calls := spy.seen(); len(calls) == 0 || calls[0] != st.want {
+			t.Errorf("%s sent %v, want %q first", st.path, calls, st.want)
+		}
+	}
+	if r := h.callAt(t, http.MethodPost, base+"/system/update", map[string]string{"part": "everything"}); r.Success {
+		t.Error("an unknown part was accepted")
+	}
+	spy.err = errors.New("plugin management by the master is disabled on this node")
+	if r := h.callAt(t, http.MethodGet, base+"/system", nil); r.Success || !strings.Contains(r.Msg, "disabled on this node") {
+		t.Errorf("a refusing node = %+v, want its reason shown", r)
 	}
 }

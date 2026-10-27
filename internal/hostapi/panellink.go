@@ -180,6 +180,29 @@ func (c *relayClient) PluginsInstall(ctx context.Context, req NodePluginInstall)
 	return err
 }
 
+func (c *relayClient) PluginsUpdate(ctx context.Context, req NodePluginInstall) error {
+	_, err := c.call(ctx, http.MethodPost, nodePluginPath("remote", "update"), req)
+	return err
+}
+
+func (c *relayClient) SystemState(ctx context.Context) (json.RawMessage, error) {
+	return c.call(ctx, http.MethodGet, nodePluginPath("system"), nil)
+}
+
+func (c *relayClient) SystemCheck(ctx context.Context) error {
+	_, err := c.call(ctx, http.MethodPost, nodePluginPath("system", "check"), nil)
+	return err
+}
+
+func (c *relayClient) SystemUpdate(ctx context.Context, part string) error {
+	body := map[string]string{}
+	if part != "" {
+		body["part"] = part
+	}
+	_, err := c.call(ctx, http.MethodPost, nodePluginPath("system", "update"), body)
+	return err
+}
+
 func (c *relayClient) PluginsSetEnabled(ctx context.Context, id string, enabled bool) error {
 	action := "disable"
 	if enabled {

@@ -33,6 +33,9 @@ func (a *PluginsController) registerNodeRoutes(g *gin.RouterGroup) {
 	g.POST("/nodes/:nodeId/restart/:id", a.nodeRestart)
 	g.POST("/nodes/:nodeId/uninstall/:id", a.nodeUninstall)
 	g.GET("/nodes/:nodeId/logs/:id", a.nodeLogs)
+	g.GET("/nodes/:nodeId/system", a.nodeSystem)
+	g.POST("/nodes/:nodeId/system/check", a.nodeSystemCheck)
+	g.POST("/nodes/:nodeId/system/update", a.nodeSystemUpdate)
 }
 
 func nodeIDParam(c *gin.Context) (int, bool) {
@@ -185,6 +188,52 @@ func (a *PluginsController) nodeLogs(c *gin.Context) {
 		return
 	}
 	jsonObj(c, out, nil)
+}
+
+func (a *PluginsController) nodeSystem(c *gin.Context) {
+	id, ok := nodeIDParam(c)
+	if !ok {
+		return
+	}
+	ctx, cancel := nodeCtx(c)
+	defer cancel()
+	obj, err := a.nodes().System(ctx, id)
+	if err != nil {
+		jsonMsg(c, "plugins: cannot read the node's plugin system", err)
+		return
+	}
+	jsonObj(c, obj, nil)
+}
+
+func (a *PluginsController) nodeSystemCheck(c *gin.Context) {
+	id, ok := nodeIDParam(c)
+	if !ok {
+		return
+	}
+	extendWriteDeadline(c, pluginRestartTimeout+pluginSlack)
+	ctx, cancel := nodeCtx(c)
+	defer cancel()
+	done(c, "plugins: the node could not check for a newer plugin system", a.nodes().SystemCheck(ctx, id))
+}
+
+func (a *PluginsController) nodeSystemUpdate(c *gin.Context) {
+	id, ok := nodeIDParam(c)
+	if !ok {
+		return
+	}
+	var body struct {
+		Part string `json:"part"`
+	}
+	if c.Request.ContentLength != 0 {
+		if err := c.ShouldBindJSON(&body); err != nil {
+			jsonMsg(c, "plugins: invalid update body", err)
+			return
+		}
+	}
+	extendWriteDeadline(c, pluginRestartTimeout+pluginSlack)
+	ctx, cancel := nodeCtx(c)
+	defer cancel()
+	done(c, "plugins: the node could not update its plugin system", a.nodes().SystemUpdate(ctx, id, body.Part))
 }
 
 func (a *PluginsController) nodes() *NodePluginsService { return a.svc.Nodes }

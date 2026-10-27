@@ -113,6 +113,10 @@ func TestRelayCarriesAllowedCallsToTheNodeAndMarksTheAnswer(t *testing.T) {
 		{"GET", "/panel/api/plugins/list"},
 		{"GET", "/panel/api/plugins/logs/hello?lines=50"},
 		{"POST", "/panel/api/plugins/remote/install"},
+		{"POST", "/panel/api/plugins/remote/update"},
+		{"GET", "/panel/api/plugins/system"},
+		{"POST", "/panel/api/plugins/system/check"},
+		{"POST", "/panel/api/plugins/system/update"},
 		{"POST", "/panel/api/plugins/enable/hello"},
 		{"POST", "/panel/api/plugins/disable/hello"},
 		{"POST", "/panel/api/plugins/restart/hello"},
@@ -123,7 +127,7 @@ func TestRelayCarriesAllowedCallsToTheNodeAndMarksTheAnswer(t *testing.T) {
 			t.Errorf("%s %s = %d %s (relayed=%q)", c.method, c.path, w.Code, w.Body, w.Header().Get("X-LucX-Relayed"))
 		}
 	}
-	if got := node.calls(); len(got) != 7 || got[1] != "GET /panel/api/plugins/logs/hello?lines=50" {
+	if got := node.calls(); len(got) != 11 || got[1] != "GET /panel/api/plugins/logs/hello?lines=50" {
 		t.Errorf("node saw %v", got)
 	}
 }

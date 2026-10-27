@@ -59,6 +59,7 @@ export default function NodeUpdateModal({
   const { t } = useTranslation();
   const [accepted, setAccepted] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState('');
 
   const added = master.permissions.filter((p) => !onNode.permissions.includes(p));
   const removed = onNode.permissions.filter((p) => !master.permissions.includes(p));
@@ -66,9 +67,11 @@ export default function NodeUpdateModal({
 
   const apply = async () => {
     setBusy(true);
+    setProblem('');
     try {
       const res = await pluginsApi.nodeUpdate(nodeId, master.id, master.permissions);
       if (res.success) onDone();
+      else setProblem(res.msg || t('pages.plugins.nodes.update.failed'));
     } finally {
       setBusy(false);
     }
@@ -116,6 +119,7 @@ export default function NodeUpdateModal({
         style={{ margin: '12px 0' }}
         message={t('pages.plugins.nodes.update.note')}
       />
+      {problem && <Alert type="error" showIcon style={{ marginBottom: 12 }} message={problem} />}
       {added.length > 0 && (
         <Checkbox checked={accepted} onChange={(e) => setAccepted(e.target.checked)}>
           {t('pages.plugins.nodes.update.accept', { node: nodeName })}
