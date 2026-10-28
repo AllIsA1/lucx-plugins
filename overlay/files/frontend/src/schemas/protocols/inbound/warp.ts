@@ -24,7 +24,6 @@ export const WarpAwgSchema = z.object({
 });
 
 export const WarpInboundSettingsSchema = z.object({
-  name: z.string().default(''),
   // host:port, up to three, one node each; empty means the endpoints Better WARP keeps (its scan).
   endpoints: z.array(z.string()).max(3).default([]),
   mtu: z.number().int().min(576).max(1420).default(1280),

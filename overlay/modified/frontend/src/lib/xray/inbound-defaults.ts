@@ -293,7 +293,6 @@ export function createDefaultNaiveInboundSettings(): NaiveInboundSettings {
 
 export function createDefaultWarpInboundSettings(): WarpInboundSettings {
   return {
-    name: '',
     endpoints: [],
     mtu: 1280,
     dns: '1.1.1.1, 1.0.0.1, 2606:4700:4700::1111, 2606:4700:4700::1001',

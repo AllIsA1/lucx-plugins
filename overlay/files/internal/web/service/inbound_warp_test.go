@@ -60,21 +60,20 @@ func TestWarpPresetsSetTheJunk(t *testing.T) {
 
 func TestWarpSettingsRefuseWhatWouldBreakALine(t *testing.T) {
 	for name, settings := range map[string]string{
-		"not json":          `{`,
-		"endpoint no port":  `{"endpoints":["162.159.192.1"]}`,
-		"endpoint a space":  `{"endpoints":["a b:2408"]}`,
-		"four endpoints":    `{"endpoints":["a.b:1","a.b:2","a.b:3","a.b:4"]}`,
-		"mtu small":         `{"mtu":100}`,
-		"mtu large":         `{"mtu":9000}`,
-		"dns a name":        `{"dns":"one.one.one.one"}`,
-		"dns a line break":  `{"dns":"1.1.1.1\n[Peer]"}`,
-		"keepalive":         `{"keepalive":-1}`,
-		"bad preset":        `{"preset":"nope"}`,
-		"too much junk":     `{"preset":"custom","awg":{"jc":99,"jmin":1,"jmax":2}}`,
-		"jmax under jmin":   `{"preset":"custom","awg":{"jc":4,"jmin":50,"jmax":10}}`,
-		"i1 a line break":   `{"preset":"custom","awg":{"jc":4,"jmin":1,"jmax":2,"i1":"<b 0x00>\n[Peer]"}}`,
-		"name a line break": `{"name":"a\nb"}`,
-		"padding too big":   `{"preset":"custom","awg":{"jc":4,"jmin":1,"jmax":2,"s1":5000}}`,
+		"not json":         `{`,
+		"endpoint no port": `{"endpoints":["162.159.192.1"]}`,
+		"endpoint a space": `{"endpoints":["a b:2408"]}`,
+		"four endpoints":   `{"endpoints":["a.b:1","a.b:2","a.b:3","a.b:4"]}`,
+		"mtu small":        `{"mtu":100}`,
+		"mtu large":        `{"mtu":9000}`,
+		"dns a name":       `{"dns":"one.one.one.one"}`,
+		"dns a line break": `{"dns":"1.1.1.1\n[Peer]"}`,
+		"keepalive":        `{"keepalive":-1}`,
+		"bad preset":       `{"preset":"nope"}`,
+		"too much junk":    `{"preset":"custom","awg":{"jc":99,"jmin":1,"jmax":2}}`,
+		"jmax under jmin":  `{"preset":"custom","awg":{"jc":4,"jmin":50,"jmax":10}}`,
+		"i1 a line break":  `{"preset":"custom","awg":{"jc":4,"jmin":1,"jmax":2,"i1":"<b 0x00>\n[Peer]"}}`,
+		"padding too big":  `{"preset":"custom","awg":{"jc":4,"jmin":1,"jmax":2,"s1":5000}}`,
 	} {
 		if err := (&InboundService{}).normalizeWarpSettings(warpInbound(settings)); err == nil {
 			t.Errorf("%s was accepted", name)
@@ -179,5 +178,15 @@ func TestTwoWarpInboundsGetDistinctAutomaticTags(t *testing.T) {
 	}
 	if a.Tag == "" || a.Tag == b.Tag {
 		t.Errorf("tags %q and %q", a.Tag, b.Tag)
+	}
+}
+
+func TestAWarpRowDoesNotKeepANameOfItsOwn(t *testing.T) {
+	ib := warpInbound(`{"name":"old name","mtu":1280}`)
+	if err := (&InboundService{}).normalizeWarpSettings(ib); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(ib.Settings, "old name") {
+		t.Errorf("the name stays: %s", ib.Settings)
 	}
 }

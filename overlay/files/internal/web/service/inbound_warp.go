@@ -11,7 +11,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/mhsanaei/3x-ui/v3/internal/database/model"
 	"github.com/mhsanaei/3x-ui/v3/internal/util/common"
@@ -69,11 +68,8 @@ func (s *InboundService) normalizeWarpSettings(inbound *model.Inbound) error {
 			return common.NewError("warp settings are not valid JSON")
 		}
 	}
-	if name, _ := settings["name"].(string); utf8.RuneCountInString(strings.TrimSpace(name)) > 60 || strings.ContainsAny(name, "\r\n\x00") {
-		return common.NewError("warp: the name is at most 60 characters on one line")
-	} else {
-		settings["name"] = strings.TrimSpace(name)
-	}
+	// The node's name in a subscription is the inbound's remark; an older row may still carry a name of its own.
+	delete(settings, "name")
 
 	// Endpoints: none means "the ones Better WARP keeps" (its scan), so the list may be empty.
 	var endpoints []string

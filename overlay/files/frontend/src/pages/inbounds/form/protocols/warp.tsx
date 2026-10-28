@@ -35,9 +35,6 @@ export default function WarpFields() {
         style={{ marginBottom: 12 }}
         message={t('pages.inbounds.form.warpNote')}
       />
-      <FormField name={['settings', 'name']} label={t('pages.inbounds.form.warpName')}>
-        <Input maxLength={60} placeholder="Cloudflare WARP" />
-      </FormField>
       <FormField
         name={['settings', 'endpoints']}
         label={t('pages.inbounds.form.warpEndpoints')}
