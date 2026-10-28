@@ -300,3 +300,60 @@ func (p *Panel) Do(ctx context.Context, method, path string, in, out any) error 
 	}
 	return json.Unmarshal(env.Obj, out)
 }
+
+// PeerCaller is the plugin that is calling a /peer/... path of this plugin. The plugin system sets it itself;
+// nobody else can forge it.
+func PeerCaller(r *http.Request) string { return r.Header.Get("X-LucX-Caller") }
+
+// Peer calls the /peer/... API of another plugin through the plugin system's gateway, with this plugin's token.
+// The manifest needs the permission "peer:<id>" and the plugin in "requires". The callee answers in the panel's
+// envelope ({"success": true, "msg": "", "obj": ...}).
+type Peer struct {
+	panel *Panel
+	id    string
+}
+
+// Peer returns a handle on the plugin id.
+func (p *Panel) Peer(id string) *Peer { return &Peer{panel: p, id: id} }
+
+// Do calls /peer<path> of the other plugin and decodes the "obj" of its answer into out. A call lasts at most
+// a minute (the gateway's limit): start a long job with one call and read it with another.
+func (q *Peer) Do(ctx context.Context, method, path string, in, out any) error {
+	var body io.Reader
+	if in != nil {
+		raw, err := json.Marshal(in)
+		if err != nil {
+			return err
+		}
+		body = strings.NewReader(string(raw))
+	}
+	req, err := http.NewRequestWithContext(ctx, method, q.panel.base+"/peer/"+q.id+path, body)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+q.panel.token)
+	if in != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	client := *q.panel.client
+	client.Timeout = 65 * time.Second
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	var env envelope
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 16<<20)).Decode(&env); err != nil {
+		return fmt.Errorf("%s answered HTTP %d for %s %s", q.id, resp.StatusCode, method, path)
+	}
+	if resp.StatusCode != http.StatusOK || !env.Success {
+		if env.Msg == "" {
+			env.Msg = fmt.Sprintf("%s answered HTTP %d for %s %s", q.id, resp.StatusCode, method, path)
+		}
+		return errors.New(env.Msg)
+	}
+	if out == nil {
+		return nil
+	}
+	return json.Unmarshal(env.Obj, out)
+}

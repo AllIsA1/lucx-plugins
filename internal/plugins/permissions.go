@@ -22,12 +22,15 @@ var (
 	eventPermission    = regexp.MustCompile(`^events:[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$`)
 	pipelinePermission = regexp.MustCompile(`^pipeline:[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$`)
 	replacePermission  = regexp.MustCompile(`^ui:replace:/([a-z0-9][a-z0-9/_-]*)?$`)
+	peerPermission     = regexp.MustCompile(`^peer:[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$`)
 )
 
 // ValidatePermission reports whether p is a permission the panel knows.
 func ValidatePermission(p string) error {
 	switch {
 	case p == permNetwork, p == permUIMenu:
+		return nil
+	case peerPermission.MatchString(p):
 		return nil
 	case apiPermission.MatchString(p):
 		return nil
@@ -63,6 +66,7 @@ func IsDangerousPermission(p string) bool {
 		strings.HasPrefix(p, "api:nodes:") ||
 		strings.HasPrefix(p, "pipeline:") ||
 		strings.HasPrefix(p, "seam:") ||
+		strings.HasPrefix(p, "peer:") ||
 		strings.HasPrefix(p, "ui:replace:")
 }
 

@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"slices"
 	"strings"
 	"time"
 
@@ -52,6 +53,7 @@ func NewGateway(svc *PluginService, panelSocket string) *Gateway {
 	g.engine.RedirectFixedPath = false
 	g.engine.Use(gin.Recovery())
 	g.engine.Any("/panel/api/*path", g.forward)
+	g.engine.Any("/peer/:id/*path", g.peer)
 	return g
 }
 
@@ -73,6 +75,28 @@ func formatRoutes(routes []plugins.APIRoute) string {
 		parts[i] = r.Method + " " + r.Pattern
 	}
 	return strings.Join(parts, ",")
+}
+
+// peer is how one plugin calls another: the caller presents its token and must hold "peer:<id>" (the manifest
+// allows that only for a plugin it requires). The call reaches the peer's /peer/... paths and nothing else.
+func (g *Gateway) peer(c *gin.Context) {
+	m, err := g.svc.Provider()
+	if err != nil {
+		pureJsonMsg(c, http.StatusServiceUnavailable, false, "the plugin system is unavailable")
+		return
+	}
+	entry, ok := m.VerifyToken(bearer(c))
+	if !ok {
+		c.Status(http.StatusUnauthorized)
+		return
+	}
+	target := c.Param("id")
+	if !slices.Contains(entry.Permissions, "peer:"+target) {
+		pureJsonMsg(c, http.StatusForbidden, false, "this plugin does not hold the permission to call "+target)
+		return
+	}
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxGatewayBody)
+	pluginProxyError(c, g.svc.ProxyPeer(c.Writer, c.Request, entry.ID, target, c.Param("path")))
 }
 
 func (g *Gateway) forward(c *gin.Context) {

@@ -64,6 +64,7 @@ The operator sees every permission before installing. Dangerous ones are marked 
 | `events:<name>` | receive a panel event, e.g. `events:client.created` (see *Events*) | no |
 | `pipeline:xray.config` | patch the generated Xray configuration (see *Pipelines*) | always |
 | `seam:api:<group>`, `seam:api:*`, `seam:sub` | take part in how the panel answers requests of one API route group (`clients`, `inbounds`, `server`, …), of all of them, or of the subscription server (see *Seams*) | always |
+| `peer:<id>` | call the HTTP API another plugin offers to its peers (see *Calling another plugin*). The plugin `<id>` must be in your `requires` | always |
 | `network` | reach the internet. Without it the plugin can only talk to the panel on this machine | always |
 | `ui:menu`, `ui:replace:<route>` | sidebar entries, replacing a built-in page (see *Interface pages*) | `replace` |
 
@@ -371,6 +372,21 @@ returns 403 (the gateway forwards a call with the list of routes this plugin may
 resolved against that list). The token stops working the
 moment the plugin is disabled, updated or its permissions change. Answers use the panel envelope
 `{"success": true, "msg": "", "obj": …}`. `Panel` in `lucxplugin.go` wraps this.
+
+## Calling another plugin
+
+A plugin can offer a part of its work to another one, for example an engine the other plugin builds on. The caller lists the
+callee in `requires` and holds the permission `peer:<id>` (dangerous: it reaches whatever the callee offers, so the operator confirms
+it). The plugin system then lets it call the callee through the same loopback gateway as the panel API, with the same token:
+
+```
+GET/POST/PUT/DELETE  $LUCX_PANEL_URL/peer/<id>/<path>   →   the callee's socket, path /peer/<path>
+```
+
+The callee serves paths below `/peer/` for this and nothing else is reachable that way (not its pages, not `/api/`, not `/_lucx/`).
+It sees `X-LucX-Caller` (the caller's id, set by the plugin system and by nobody else) and no user, cookie or token. A callee that is
+off or not running answers 503, a callee the caller has no permission for 403. Bodies are limited to 10 MiB and a call to 60 seconds,
+so a long job should be started by one call and read by another. `Peer` in `lucxplugin.go` wraps this.
 
 ## Installing
 

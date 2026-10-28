@@ -233,6 +233,15 @@ func (s *PluginService) Proxy(w http.ResponseWriter, r *http.Request, id, subpat
 	return sup.Proxy(w, r, id, subpath, user)
 }
 
+// ProxyPeer forwards a call of plugin caller to the peer plugin target (see plugins.Supervisor.ProxyPeer).
+func (s *PluginService) ProxyPeer(w http.ResponseWriter, r *http.Request, caller, target, subpath string) error {
+	sup := s.supervisor()
+	if sup == nil {
+		return plugins.ErrNotRunning
+	}
+	return sup.ProxyPeer(w, r, caller, target, subpath)
+}
+
 // PreviewUpdate downloads a plugin's update and says what it would change.
 func (s *PluginService) PreviewUpdate(ctx context.Context, id, ref string) (*plugins.UpdatePreview, error) {
 	m, err := s.Provider()

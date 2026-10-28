@@ -53,6 +53,38 @@ func (s *Supervisor) Proxy(w http.ResponseWriter, r *http.Request, id, subpath, 
 	if rt, _ := s.Runtime(id); !e.Enabled || rt.State != StateRunning {
 		return ErrNotRunning
 	}
+	s.forward(w, r, id, clean, func(h http.Header) { h.Set("X-LucX-User", user) })
+	return nil
+}
+
+// PeerPrefix is the part of a plugin's URL space that other plugins may call: ProxyPeer reaches nothing else.
+const PeerPrefix = "/peer"
+
+// ProxyPeer forwards a call of plugin caller to plugin target's PeerPrefix + subpath. The caller must hold
+// "peer:<target>" (checked by the gateway, which knows the token); here only the target is looked at: it must be a
+// plugin with a process that is on and running. The target sees who is calling in X-LucX-Caller, set by nobody else.
+func (s *Supervisor) ProxyPeer(w http.ResponseWriter, r *http.Request, caller, target, subpath string) error {
+	e, ok := s.mgr.reg.Get(target)
+	if !ok || caller == target || (e.Type != TypeProcess && e.Type != TypeHook) {
+		return ErrNotFound
+	}
+	clean := path.Clean("/" + subpath)
+	if clean == "/" || strings.Contains(subpath, "..") {
+		return ErrNotFound
+	}
+	if isUpgrade(r) {
+		return ErrUpgradeUnsupported
+	}
+	if rt, _ := s.Runtime(target); !e.Enabled || rt.State != StateRunning {
+		return ErrNotRunning
+	}
+	s.forward(w, r, target, PeerPrefix+clean, func(h http.Header) { h.Set("X-LucX-Caller", caller) })
+	return nil
+}
+
+// forward sends r to plugin id's socket at urlPath. Everything that identifies the original caller to the panel
+// (cookie, tokens) and every X-LucX-* header of the request is dropped; mark adds the host's own.
+func (s *Supervisor) forward(w http.ResponseWriter, r *http.Request, id, urlPath string, mark func(http.Header)) {
 	socket, _ := s.runner.Paths(id)
 	requestID := newRequestID()
 
@@ -68,7 +100,7 @@ func (s *Supervisor) Proxy(w http.ResponseWriter, r *http.Request, id, subpath, 
 			out := pr.Out
 			out.URL.Scheme = "http"
 			out.URL.Host = "plugin"
-			out.URL.Path = clean
+			out.URL.Path = urlPath
 			out.URL.RawPath = ""
 			out.Host = "plugin"
 			for _, h := range []string{"Cookie", "Authorization", "Proxy-Authorization", "X-Csrf-Token"} {
@@ -80,7 +112,7 @@ func (s *Supervisor) Proxy(w http.ResponseWriter, r *http.Request, id, subpath, 
 				}
 			}
 			pr.SetXForwarded()
-			out.Header.Set("X-LucX-User", user)
+			mark(out.Header)
 			out.Header.Set("X-LucX-Plugin-Id", id)
 			out.Header.Set("X-LucX-Request-Id", requestID)
 		},
@@ -101,7 +133,6 @@ func (s *Supervisor) Proxy(w http.ResponseWriter, r *http.Request, id, subpath, 
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, s.opt.MaxProxyBody)
 	proxy.ServeHTTP(w, r)
-	return nil
 }
 
 func newRequestID() string {

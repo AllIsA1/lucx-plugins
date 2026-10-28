@@ -12,6 +12,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -193,12 +194,29 @@ func (m *Manifest) validatePermissions() error {
 		if m.Type == TypeUI && needsProcess(p) {
 			return fmt.Errorf("permission %q is not allowed for ui plugins (they have no process)", p)
 		}
+		if peer, ok := PeerOf(p); ok {
+			if peer == m.ID {
+				return errors.New("a plugin cannot call itself (permission " + p + ")")
+			}
+			if !slices.Contains(m.Requires, peer) {
+				return fmt.Errorf("permission %q needs %q in requires: a plugin can call only a plugin it requires", p, peer)
+			}
+		}
 	}
 	return nil
 }
 
 func needsProcess(p string) bool {
-	return p == permNetwork || strings.HasPrefix(p, "events:") || strings.HasPrefix(p, "pipeline:") || strings.HasPrefix(p, "seam:")
+	return p == permNetwork || strings.HasPrefix(p, "events:") || strings.HasPrefix(p, "pipeline:") || strings.HasPrefix(p, "seam:") ||
+		strings.HasPrefix(p, "peer:")
+}
+
+// PeerOf is the plugin a "peer:<id>" permission lets the holder call; ok is false for any other permission.
+func PeerOf(p string) (id string, ok bool) {
+	if !peerPermission.MatchString(p) {
+		return "", false
+	}
+	return strings.TrimPrefix(p, "peer:"), true
 }
 
 func (m *Manifest) validateRun() error {
