@@ -125,3 +125,27 @@ describe('encodeOpenfluxLink', () => {
     expect(payload.transports[1].url).toBe('https://y.example/new');
   });
 });
+
+// The original three carriers keep their shape (the plugin system's own v0.13 carriers have tests above).
+describe('encodeOpenfluxLink original carriers', () => {
+  it('keeps the legacy three-carrier link byte-identical in shape', () => {
+    const link = encodeOpenfluxLink({
+      secret: '0123456789abcdef',
+      host: '203.0.113.5',
+      port: 18445,
+      yandexUrl: 'https://docs.example/view?id=1',
+      mailruUrl: 'https://cloud.mail.ru/public/a/b',
+      cupsUrl: 'https://interview.cups.online/live-coding/?room=x',
+    });
+    const payload = JSON.parse(decode(link));
+    expect(payload.transports.map((t: { type: string }) => t.type)).toEqual([
+      'direct',
+      'yandex',
+      'mailru',
+      'cupsonline',
+    ]);
+    expect(payload.transports.map((t: { priority: number }) => t.priority)).toEqual([
+      100, 50, 40, 30,
+    ]);
+  });
+});

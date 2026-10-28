@@ -21,6 +21,7 @@ import { awgPortableIField } from './awg-descriptor'; // LUCX-HOOK
 import { parseGeckoPacketSize } from '@/lib/xray/forms/transport/FinalMaskForm';
 import { getHeaderValue } from './headers';
 import { encodeOpenfluxLink } from './openflux-link';
+import { genMasterdnsLink } from './masterdns-link'; // LUCX-HOOK: MasterDNSVPN config wrapper
 import { gcm } from '@noble/ciphers/aes.js'; // LUCX-HOOK: csqtt link cipher
 import { concatBytes, utf8ToBytes } from '@noble/ciphers/utils.js'; // LUCX-HOOK
 import { sha256 } from '@noble/hashes/sha2.js'; // LUCX-HOOK
@@ -1539,6 +1540,8 @@ export function genLink(input: GenLinkInput): string {
       return genQwdttLink({ inbound, address, remark });
     case 'csqtt':
       return genCsqttLink({ inbound, address });
+    case 'masterdns': // LUCX-HOOK: MasterDNSVPN client-config wrapper
+      return genMasterdnsLink({ inbound });
     case 'openflux':
       return genOpenfluxLink({ inbound, address, remark });
     case 'anytls':
@@ -1676,6 +1679,9 @@ export function genInboundLinks(input: GenInboundLinksInput): string {
   if (inbound.protocol === 'csqtt') {
     return genCsqttLink({ inbound, address: addr });
   }
+  if (inbound.protocol === 'masterdns') {
+    return genMasterdnsLink({ inbound });
+  }
   if (inbound.protocol === 'openflux') {
     return genOpenfluxLink({ inbound, address: addr, remark });
   }
@@ -1744,6 +1750,10 @@ export function genOpenfluxLink(input: {
     yandexUrl?: string;
     mailruUrl?: string;
     cupsUrl?: string;
+    vyandexUrl?: string;
+    boardsUrl?: string;
+    telemostUrl?: string;
+    avitoUrl?: string;
   };
   const host = (s.shareHost || input.address || '').trim();
   return encodeOpenfluxLink({
@@ -1754,6 +1764,11 @@ export function genOpenfluxLink(input: {
     yandexUrl: (s.yandexUrl || '').trim(),
     mailruUrl: (s.mailruUrl || '').trim(),
     cupsUrl: (s.cupsUrl || '').trim(),
+    // LUCX-HOOK (#148): carriers shareable since core v0.13.0.
+    vyandexUrl: (s.vyandexUrl || '').trim(),
+    boardsUrl: (s.boardsUrl || '').trim(),
+    telemostUrl: (s.telemostUrl || '').trim(),
+    avitoUrl: (s.avitoUrl || '').trim(),
   });
 }
 
