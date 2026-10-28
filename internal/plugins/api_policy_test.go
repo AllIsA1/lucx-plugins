@@ -40,25 +40,6 @@ func TestAllowAPIFollowsThePermissionsHeld(t *testing.T) {
 		{read, http.MethodGet, "/clients/get/:email", true},
 		{read, http.MethodGet, "/clients/get/alice@example.com", false},
 		{read, http.MethodDelete, "/clients/list", false},
-		{[]string{"api:openflux:read"}, http.MethodGet, "/tunnel/openflux/status", true},
-		{[]string{"api:openflux:read"}, http.MethodPost, "/tunnel/openflux/download", false},
-		{[]string{"api:openflux:write"}, http.MethodPost, "/tunnel/openflux/download", true},
-		{[]string{"api:openflux:write"}, http.MethodPost, "/tunnel/openflux/deleteBinary", true},
-		{[]string{"api:openflux:write"}, http.MethodGet, "/tunnel/openflux/status", false},
-		{[]string{"api:openflux:write", "api:openflux:read"}, http.MethodPost, "/tunnel/openflux/upload", false},
-		{[]string{"api:olcrtc:write"}, http.MethodPost, "/tunnel/olcrtc/download", true},
-		{[]string{"api:olcrtc:write"}, http.MethodPost, "/tunnel/olcrtc/deleteBinary", true},
-		{[]string{"api:olcrtc:write"}, http.MethodGet, "/tunnel/olcrtc/status", false},
-		{[]string{"api:olcrtc:write", "api:cores:read"}, http.MethodGet, "/tunnel/olcrtc/status", true},
-		{[]string{"api:olcrtc:write", "api:cores:read"}, http.MethodPost, "/tunnel/olcrtc/upload", false},
-		{[]string{"api:olcrtc:write", "api:cores:read"}, http.MethodGet, "/tunnel/olcrtc/logs", false},
-		{[]string{"api:olcrtc:write"}, http.MethodPost, "/tunnel/mieru/download", false},
-		{[]string{"api:olcrtc:write"}, http.MethodPost, "/tunnel/openflux/download", false},
-		{[]string{"api:cores:read"}, http.MethodGet, "/tunnel/mieru/status", true},
-		{[]string{"api:cores:read"}, http.MethodGet, "/tunnel/openflux/status", false},
-		{[]string{"api:cores:read"}, http.MethodGet, "/tunnel/mieru/logs", false},
-		{[]string{"api:cores:read"}, http.MethodPost, "/tunnel/mieru/download", false},
-		{[]string{"api:cores:read"}, http.MethodGet, "/tunnel/naive/logs", false},
 	}
 	for _, tc := range cases {
 		if got := AllowAPI(tc.perms, tc.method, tc.pattern); got != tc.want {
@@ -119,7 +100,7 @@ func TestAllowAPINeverReachesPrivilegedRoutes(t *testing.T) {
 func TestAPIPolicyIsWellFormed(t *testing.T) {
 	prefix := map[string]string{
 		"clients": "/clients", "inbounds": "/inbounds", "hosts": "/hosts", "nodes": "/nodes",
-		"server": "/server", "xray": "/xray", "settings": "/setting", "openflux": "/tunnel/openflux", "cores": "/tunnel", "olcrtc": "/tunnel/olcrtc",
+		"server": "/server", "xray": "/xray", "settings": "/setting",
 	}
 	seen := map[string]string{}
 	for perm, routes := range apiPolicy {
@@ -148,9 +129,6 @@ func TestAPIPolicyIsWellFormed(t *testing.T) {
 	}
 	for resource := range prefix {
 		for _, mode := range []string{"read", "write"} {
-			if (resource == "cores" && mode == "write") || (resource == "olcrtc" && mode == "read") {
-				continue // cores is read only; olcrtc is write only (its status is api:cores:read)
-			}
 			if _, ok := apiPolicy["api:"+resource+":"+mode]; !ok {
 				t.Errorf("no policy for api:%s:%s although the grammar accepts it", resource, mode)
 			}
@@ -159,12 +137,12 @@ func TestAPIPolicyIsWellFormed(t *testing.T) {
 }
 
 func TestSensitiveAPIPermissionsAreDangerous(t *testing.T) {
-	for _, p := range []string{"api:settings:read", "api:settings:write", "api:nodes:read", "api:nodes:write", "api:clients:write", "api:openflux:write", "api:olcrtc:write"} {
+	for _, p := range []string{"api:settings:read", "api:settings:write", "api:nodes:read", "api:nodes:write", "api:clients:write"} {
 		if !IsDangerousPermission(p) {
 			t.Errorf("%s exposes secrets or controls other servers and must be flagged", p)
 		}
 	}
-	for _, p := range []string{"api:clients:read", "api:inbounds:read", "api:server:read", "api:hosts:read", "api:xray:read", "api:openflux:read", "api:cores:read"} {
+	for _, p := range []string{"api:clients:read", "api:inbounds:read", "api:server:read", "api:hosts:read", "api:xray:read"} {
 		if IsDangerousPermission(p) {
 			t.Errorf("%s is an ordinary read permission", p)
 		}
@@ -208,11 +186,11 @@ func TestAllowedRoutesListsOnlyWhatThePermissionsGrant(t *testing.T) {
 	}
 }
 
-func TestCoresIsAReadOnlyResource(t *testing.T) {
-	if err := ValidatePermission("api:cores:read"); err != nil {
-		t.Errorf("api:cores:read: %v", err)
-	}
-	if err := ValidatePermission("api:cores:write"); err == nil {
-		t.Error("api:cores:write exists: no plugin may replace these cores yet")
+func TestPermissionsOfTheRetiredCorePluginsAreGone(t *testing.T) {
+	// Better OpenFlux, Better olcRTC and Better Cores no longer touch the panel's cores (it brings them itself).
+	for _, p := range []string{"api:openflux:read", "api:openflux:write", "api:cores:read", "api:olcrtc:write"} {
+		if err := ValidatePermission(p); err == nil {
+			t.Errorf("%s is still a valid permission", p)
+		}
 	}
 }

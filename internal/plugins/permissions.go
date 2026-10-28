@@ -18,7 +18,7 @@ const (
 )
 
 var (
-	apiPermission      = regexp.MustCompile(`^api:((clients|inbounds|hosts|nodes|server|xray|settings|openflux):(read|write)|cores:read|olcrtc:write)$`)
+	apiPermission      = regexp.MustCompile(`^api:(clients|inbounds|hosts|nodes|server|xray|settings):(read|write)$`)
 	eventPermission    = regexp.MustCompile(`^events:[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$`)
 	pipelinePermission = regexp.MustCompile(`^pipeline:[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$`)
 	replacePermission  = regexp.MustCompile(`^ui:replace:/([a-z0-9][a-z0-9/_-]*)?$`)

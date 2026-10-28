@@ -77,20 +77,7 @@ var apiPolicy = map[string][]APIRoute{
 		get("/xray/getOutboundsTraffic", "/xray/getXrayResult", "/xray/outbound-subs"),
 		post("/xray/", "/xray/balancerStatus"),
 	),
-	"api:xray:write": post("/xray/update", "/xray/resetOutboundsTraffic"),
-	// openflux is the OpenFlux exit's core binary and nothing else of the tunnel routes (no upload, no logs, no
-	// other core): a plugin that keeps the core up to date needs to see whether it is there and to replace it by
-	// a download that must match a hash it names. The panel runs that binary as root, so write is the dangerous permission it always is.
-	"api:openflux:read":  get("/tunnel/openflux/status"),
-	"api:openflux:write": post("/tunnel/openflux/download", "/tunnel/openflux/deleteBinary"),
-	// cores: whether each tunnel core other than OpenFlux (which has its own pair) is there and running. Read only:
-	// replacing a core is a download the panel runs as root, which no plugin may do for these (olcRTC has api:olcrtc:write).
-	"api:cores:read": get(
-		"/tunnel/naive/status", "/tunnel/olcrtc/status", "/tunnel/qwdtt/status", "/tunnel/csqtt/status", "/tunnel/mieru/status",
-		"/tunnel/trusttunnel/status", "/tunnel/anytls/status", "/tunnel/tproxy/status", "/tunnel/mtproxy/status"),
-	// olcrtc: replace the olcRTC core by a download that must match a hash the plugin names, and remove it. Write only:
-	// whether it is there is api:cores:read (a route is granted by one permission). The panel runs the file as root.
-	"api:olcrtc:write":   post("/tunnel/olcrtc/download", "/tunnel/olcrtc/deleteBinary"),
+	"api:xray:write":     post("/xray/update", "/xray/resetOutboundsTraffic"),
 	"api:settings:read":  post("/setting/all"),
 	"api:settings:write": post("/setting/update"),
 }
