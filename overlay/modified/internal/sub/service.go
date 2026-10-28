@@ -495,6 +495,22 @@ func (s *SubService) getSubs(subId string) ([]string, []string, int64, xray.Clie
 			}
 			continue
 		}
+		// LUCX-HOOK: a WARP inbound has no link of the panel's own; the Better WARP plugin writes its lines. The
+		// client still counts as a subscriber (the answer is an empty subscription, not a 404).
+		if inbound.Protocol == model.Warp {
+			for _, client := range clients {
+				if client.Enable {
+					hasEnabledClient = true
+				}
+				emails = append(emails, client.Email)
+				seenEmails[client.Email] = struct{}{}
+			}
+			if result == nil {
+				result = []string{}
+			}
+			continue
+		}
+		// END LUCX-HOOK
 		s.projectThroughFallbackMaster(inbound)
 		// Host overrides apply AFTER fallback projection so a host's
 		// address/TLS wins over the projected master stream.
@@ -699,7 +715,7 @@ func (s *SubService) getInboundsBySubId(subId string) ([]*model.Inbound, error) 
 		JOIN client_inbounds ON client_inbounds.inbound_id = inbounds.id
 		JOIN clients ON clients.id = client_inbounds.client_id
 		WHERE
-			inbounds.protocol in ('vmess','vless','trojan','shadowsocks','hysteria','wireguard','amneziawg','mtproto','tuic','masque','awg','naive','olcrtc','qwdtt','csqtt','openflux','mieru','trusttunnel','anytls','tproxy')
+			inbounds.protocol in ('vmess','vless','trojan','shadowsocks','hysteria','wireguard','amneziawg','mtproto','tuic','masque','awg','naive','olcrtc','qwdtt','csqtt','openflux','mieru','trusttunnel','anytls','tproxy','warp')
 			AND clients.sub_id = ? AND inbounds.enable = ?
 	)`, subId, true).Order("sub_sort_index ASC").Order("id ASC").Find(&inbounds).Error
 	if err != nil {

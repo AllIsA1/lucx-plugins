@@ -56,7 +56,24 @@
         "olcrtcTrafficMaxPayload": "Max message size (bytes)",
         "olcrtcTrafficMinDelay": "Min send delay",
         "olcrtcTrafficMaxDelay": "Max send delay",
-        "olcrtcTrafficHint": "Traffic shaping; use the same value on both sides. Empty / 0 = none."
+        "olcrtcTrafficHint": "Traffic shaping; use the same value on both sides. Empty / 0 = none.",
+        "warpNote": "Cloudflare WARP over AmneziaWG. Nothing listens on this server: the clients attached to this inbound get WARP nodes in their subscription (vpn://, amneziawg://, the older amneziawg:// link and .conf). The Better WARP plugin registers their devices and writes the lines; its WARP page has the account, WARP+ and the endpoint scanner.",
+        "warpName": "Node name (the remark if empty)",
+        "warpEndpoints": "Endpoints (one node each, at most 3)",
+        "warpEndpointsHint": "host:port. Empty: the endpoints Better WARP keeps (its scan finds the quickest). Default is engage.cloudflareclient.com:2408.",
+        "warpIpv6": "IPv6 inside the tunnel",
+        "warpKeepalive": "Keepalive, seconds",
+        "warpPreset": "Junk packets",
+        "warpPresetHint": "WARP speaks plain WireGuard: only the junk packets sent before the handshake (Jc, Jmin, Jmax) are safe.",
+        "warpPresetStandard": "Standard (Jc 4, 40–70)",
+        "warpPresetLight": "Light (Jc 2, 20–40)",
+        "warpPresetStrong": "Strong (Jc 8, 50–150)",
+        "warpPresetCustom": "Custom",
+        "warpAdvanced": "AmneziaWG fields",
+        "warpAdvancedWarn": "S1, S2 and H1–H4 other than their defaults make Cloudflare drop the handshake. Change them only if you know why."
+      },
+      "protocolNames": {
+        "warp": "Cloudflare WARP"
       }
     },
     "plugins": {

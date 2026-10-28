@@ -56,7 +56,24 @@
         "olcrtcTrafficMaxPayload": "Макс. размер сообщения (байт)",
         "olcrtcTrafficMinDelay": "Мин. задержка отправки",
         "olcrtcTrafficMaxDelay": "Макс. задержка отправки",
-        "olcrtcTrafficHint": "Формирование трафика; на обеих сторонах одно и то же. Пусто / 0 = нет."
+        "olcrtcTrafficHint": "Формирование трафика; на обеих сторонах одно и то же. Пусто / 0 = нет.",
+        "warpNote": "Cloudflare WARP поверх AmneziaWG. На этом сервере ничего не слушает: клиенты, привязанные к этому inbound, получают узлы WARP в подписке (vpn://, amneziawg://, старая ссылка amneziawg:// и .conf). Устройства им регистрирует и строки пишет плагин Better WARP; на его странице WARP — аккаунт, WARP+ и сканер endpoints.",
+        "warpName": "Название узла (если пусто — remark)",
+        "warpEndpoints": "Endpoints (по узлу на каждый, не больше 3)",
+        "warpEndpointsHint": "host:port. Пусто: endpoints, которые держит Better WARP (его сканер находит самые быстрые). По умолчанию engage.cloudflareclient.com:2408.",
+        "warpIpv6": "IPv6 внутри туннеля",
+        "warpKeepalive": "Keepalive, секунд",
+        "warpPreset": "Мусорные пакеты",
+        "warpPresetHint": "WARP говорит на обычном WireGuard: безопасны только мусорные пакеты перед рукопожатием (Jc, Jmin, Jmax).",
+        "warpPresetStandard": "Стандарт (Jc 4, 40–70)",
+        "warpPresetLight": "Лёгкий (Jc 2, 20–40)",
+        "warpPresetStrong": "Сильный (Jc 8, 50–150)",
+        "warpPresetCustom": "Свои",
+        "warpAdvanced": "Поля AmneziaWG",
+        "warpAdvancedWarn": "S1, S2 и H1–H4, отличные от значений по умолчанию, заставят Cloudflare сбросить рукопожатие. Меняйте, только если знаете зачем."
+      },
+      "protocolNames": {
+        "warp": "Cloudflare WARP"
       }
     },
     "plugins": {

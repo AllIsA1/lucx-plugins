@@ -13,6 +13,7 @@ import type { MtprotoClient, MtprotoInboundSettings } from '@/schemas/protocols/
 import type { AwgInboundSettings } from '@/schemas/protocols/inbound/awg'; // LUCX-HOOK: AWG
 import type { NaiveInboundSettings } from '@/schemas/protocols/inbound/naive'; // LUCX-HOOK: Naive
 import type { OlcrtcInboundSettings } from '@/schemas/protocols/inbound/olcrtc';
+import type { WarpInboundSettings } from '@/schemas/protocols/inbound/warp';
 import type { QwdttInboundSettings } from '@/schemas/protocols/inbound/qwdtt';
 import type { CsqttInboundSettings } from '@/schemas/protocols/inbound/csqtt';
 import type { OpenfluxInboundSettings } from '@/schemas/protocols/inbound/openflux';
@@ -285,6 +286,35 @@ export function createDefaultNaiveInboundSettings(): NaiveInboundSettings {
     useRawConfig: false,
     rawConfig: '',
     behindCover: false,
+    clients: [],
+  };
+}
+
+export function createDefaultWarpInboundSettings(): WarpInboundSettings {
+  return {
+    name: '',
+    endpoints: [],
+    mtu: 1280,
+    dns: '1.1.1.1, 1.0.0.1, 2606:4700:4700::1111, 2606:4700:4700::1001',
+    ipv6: true,
+    keepalive: 25,
+    preset: 'standard',
+    awg: {
+      jc: 4,
+      jmin: 40,
+      jmax: 70,
+      s1: 0,
+      s2: 0,
+      h1: '',
+      h2: '',
+      h3: '',
+      h4: '',
+      i1: '',
+      i2: '',
+      i3: '',
+      i4: '',
+      i5: '',
+    },
     clients: [],
   };
 }
@@ -670,6 +700,7 @@ export type AnyInboundSettings =
   | AwgInboundSettings // LUCX-HOOK: AWG
   | NaiveInboundSettings
   | OlcrtcInboundSettings
+  | WarpInboundSettings
   | QwdttInboundSettings
   | CsqttInboundSettings
   | OpenfluxInboundSettings
@@ -716,6 +747,8 @@ export function createDefaultInboundSettings(protocol: string): AnyInboundSettin
       return createDefaultNaiveInboundSettings(); // LUCX-HOOK: Naive
     case 'olcrtc':
       return createDefaultOlcrtcInboundSettings();
+    case 'warp':
+      return createDefaultWarpInboundSettings(); // LUCX-HOOK: WARP
     case 'qwdtt':
       return createDefaultQwdttInboundSettings();
     case 'csqtt':
