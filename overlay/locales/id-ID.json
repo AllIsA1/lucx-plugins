@@ -76,6 +76,29 @@
         "warp": "Cloudflare WARP"
       }
     },
+    "settings": {
+      "cores": {
+        "updates": {
+          "title": "Pembaruan inti",
+          "desc": "Plugin Better Cores mencari rilis baru OpenFlux, mieru, dan TrustTunnel sekali sehari. Rilis yang dipasang di sini menggantikan salinan bawaan panel dan dipasang kembali setelah panel diperbarui.",
+          "checkNow": "Periksa sekarang",
+          "checkFailed": "Tidak dapat memeriksa pembaruan",
+          "installFailed": "Tidak dapat memulai pemasangan",
+          "available": "{n} pembaruan",
+          "neverChecked": "Belum diperiksa",
+          "lastChecked": "Terakhir diperiksa: {at}",
+          "nextCheck": "pemeriksaan berikutnya: {at}",
+          "panelCopy": "Salinan bawaan panel",
+          "installedByPlugin": "Dipasang oleh Better Cores: {tag} ({at})",
+          "latest": "Rilis terbaru: {tag} ({at})",
+          "releaseNotes": "halaman rilis",
+          "newer": "Ada yang lebih baru",
+          "updateTo": "Perbarui ke {tag}",
+          "installRelease": "Pasang {tag}",
+          "reinstall": "Pasang ulang"
+        }
+      }
+    },
     "plugins": {
       "title": "Plugins",
       "subtitle": "Extend the panel with plugins from GitHub. Each plugin lives in its own folder and never modifies panel files; removing it restores the panel to its previous state.",

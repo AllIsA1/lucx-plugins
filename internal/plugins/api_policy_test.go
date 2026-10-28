@@ -187,10 +187,37 @@ func TestAllowedRoutesListsOnlyWhatThePermissionsGrant(t *testing.T) {
 }
 
 func TestPermissionsOfTheRetiredCorePluginsAreGone(t *testing.T) {
-	// Better OpenFlux, Better olcRTC and Better Cores no longer touch the panel's cores (it brings them itself).
-	for _, p := range []string{"api:openflux:read", "api:openflux:write", "api:cores:read", "api:olcrtc:write"} {
+	// Better OpenFlux and Better olcRTC no longer touch the panel's cores (it brings them itself); Better Cores keeps
+	// the cores group (api:cores:read, api:cores:write).
+	for _, p := range []string{"api:openflux:read", "api:openflux:write", "api:olcrtc:write"} {
 		if err := ValidatePermission(p); err == nil {
 			t.Errorf("%s is still a valid permission", p)
+		}
+	}
+}
+
+func TestCoresPermissionsReachOnlyTheStatusAndTheThreeDownloads(t *testing.T) {
+	for _, p := range []string{"api:cores:read", "api:cores:write"} {
+		if err := ValidatePermission(p); err != nil {
+			t.Errorf("%s: %v", p, err)
+		}
+	}
+	if IsDangerousPermission("api:cores:read") || !IsDangerousPermission("api:cores:write") {
+		t.Error("read is plain, write is the dangerous one")
+	}
+	read, write := []string{"api:cores:read"}, []string{"api:cores:write"}
+	if !AllowAPI(read, http.MethodGet, "/tunnel/mieru/status") || AllowAPI(read, http.MethodPost, "/tunnel/mieru/download") {
+		t.Error("read must see the status and never download")
+	}
+	for _, core := range []string{"openflux", "mieru", "trusttunnel"} {
+		if !AllowAPI(write, http.MethodPost, "/tunnel/"+core+"/download") {
+			t.Errorf("write must download %s", core)
+		}
+	}
+	for _, pattern := range []string{"/tunnel/anytls/download", "/tunnel/olcrtc/download", "/tunnel/naive/download", "/tunnel/mieru/upload",
+		"/tunnel/mieru/deleteBinary", "/tunnel/mieru/status"} {
+		if AllowAPI(write, http.MethodPost, pattern) || AllowAPI(write, http.MethodGet, pattern) {
+			t.Errorf("write must not reach %s", pattern)
 		}
 	}
 }

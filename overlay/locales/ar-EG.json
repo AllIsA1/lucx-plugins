@@ -76,6 +76,29 @@
         "warp": "Cloudflare WARP"
       }
     },
+    "settings": {
+      "cores": {
+        "updates": {
+          "title": "تحديثات الأنوية",
+          "desc": "تبحث إضافة Better Cores مرة يوميًا عن إصدارات جديدة من OpenFlux وmieru وTrustTunnel. الإصدار الذي تثبّته هنا يحل محل النسخة المرفقة مع اللوحة ويُعاد وضعه بعد تحديث اللوحة.",
+          "checkNow": "تحقق الآن",
+          "checkFailed": "تعذّر التحقق من التحديثات",
+          "installFailed": "تعذّر بدء التثبيت",
+          "available": "{n} تحديث",
+          "neverChecked": "لم يتم التحقق بعد",
+          "lastChecked": "آخر تحقق: {at}",
+          "nextCheck": "التحقق التالي: {at}",
+          "panelCopy": "النسخة المرفقة مع اللوحة",
+          "installedByPlugin": "ثبّتها Better Cores: {tag} ({at})",
+          "latest": "أحدث إصدار: {tag} ({at})",
+          "releaseNotes": "صفحة الإصدار",
+          "newer": "يوجد إصدار أحدث",
+          "updateTo": "التحديث إلى {tag}",
+          "installRelease": "تثبيت {tag}",
+          "reinstall": "إعادة التثبيت"
+        }
+      }
+    },
     "plugins": {
       "title": "Plugins",
       "subtitle": "Extend the panel with plugins from GitHub. Each plugin lives in its own folder and never modifies panel files; removing it restores the panel to its previous state.",

@@ -59,8 +59,8 @@ The operator sees every permission before installing. Dangerous ones are marked 
 
 | Permission | Grants | Dangerous |
 |---|---|---|
-| `api:<resource>:read` | read routes of the panel API for `clients`, `inbounds`, `hosts`, `nodes`, `server`, `xray` and `settings` | `nodes`, `settings` |
-| `api:<resource>:write` | change routes for the same resources. Write does not include read | always |
+| `api:<resource>:read` | read routes of the panel API for `clients`, `inbounds`, `hosts`, `nodes`, `server`, `xray`, `settings` and `cores` (status of the tunnel cores) | `nodes`, `settings` |
+| `api:<resource>:write` | change routes for the same resources. Write does not include read. For `cores` it is the download of a core binary (OpenFlux, mieru, TrustTunnel) that must match a SHA-256 the plugin names | always |
 | `events:<name>` | receive a panel event, e.g. `events:client.created` (see *Events*) | no |
 | `pipeline:xray.config` | patch the generated Xray configuration (see *Pipelines*) | always |
 | `seam:api:<group>`, `seam:api:*`, `seam:sub` | take part in how the panel answers requests of one API route group (`clients`, `inbounds`, `server`, …), of all of them, or of the subscription server (see *Seams*) | always |

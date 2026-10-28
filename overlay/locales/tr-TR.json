@@ -76,6 +76,29 @@
         "warp": "Cloudflare WARP"
       }
     },
+    "settings": {
+      "cores": {
+        "updates": {
+          "title": "Çekirdek güncellemeleri",
+          "desc": "Better Cores eklentisi günde bir kez OpenFlux, mieru ve TrustTunnel için yeni sürümleri arar. Burada kurduğunuz sürüm panelle gelen kopyanın yerini alır ve panel güncellendikten sonra yeniden yerine konur.",
+          "checkNow": "Şimdi denetle",
+          "checkFailed": "Güncellemeler denetlenemedi",
+          "installFailed": "Kurulum başlatılamadı",
+          "available": "{n} güncelleme",
+          "neverChecked": "Henüz denetlenmedi",
+          "lastChecked": "Son denetim: {at}",
+          "nextCheck": "sonraki denetim: {at}",
+          "panelCopy": "Panelle gelen kopya",
+          "installedByPlugin": "Better Cores kurdu: {tag} ({at})",
+          "latest": "Son sürüm: {tag} ({at})",
+          "releaseNotes": "sürüm sayfası",
+          "newer": "Daha yeni sürüm var",
+          "updateTo": "{tag} sürümüne güncelle",
+          "installRelease": "{tag} kur",
+          "reinstall": "Yeniden kur"
+        }
+      }
+    },
     "plugins": {
       "title": "Plugins",
       "subtitle": "Extend the panel with plugins from GitHub. Each plugin lives in its own folder and never modifies panel files; removing it restores the panel to its previous state.",

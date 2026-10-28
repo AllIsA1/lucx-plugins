@@ -76,6 +76,29 @@
         "warp": "Cloudflare WARP"
       }
     },
+    "settings": {
+      "cores": {
+        "updates": {
+          "title": "コアの更新",
+          "desc": "Better Cores プラグインは、OpenFlux・mieru・TrustTunnel の新しいリリースを1日1回確認します。ここでインストールしたリリースはパネル同梱のコピーに置き換わり、パネルの更新後に元へ戻されます。",
+          "checkNow": "今すぐ確認",
+          "checkFailed": "更新を確認できませんでした",
+          "installFailed": "インストールを開始できませんでした",
+          "available": "更新 {n} 件",
+          "neverChecked": "未確認",
+          "lastChecked": "最終確認: {at}",
+          "nextCheck": "次回確認: {at}",
+          "panelCopy": "パネル同梱のコピー",
+          "installedByPlugin": "Better Cores がインストール: {tag}（{at}）",
+          "latest": "最新リリース: {tag}（{at}）",
+          "releaseNotes": "リリースページ",
+          "newer": "新しいリリースあり",
+          "updateTo": "{tag} に更新",
+          "installRelease": "{tag} をインストール",
+          "reinstall": "再インストール"
+        }
+      }
+    },
     "plugins": {
       "title": "Plugins",
       "subtitle": "Extend the panel with plugins from GitHub. Each plugin lives in its own folder and never modifies panel files; removing it restores the panel to its previous state.",

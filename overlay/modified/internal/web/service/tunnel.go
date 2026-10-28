@@ -1146,12 +1146,27 @@ func (s *TunnelService) downloadBinaryTo(dst, downloadURL, wantSHA256 string) er
 		return common.NewErrorf("tunnel: sha256 mismatch: expected %s, got %s", wantSHA256, got)
 	}
 
+	if err := unpackCore(tmp, archiveMemberFor(dst)); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+
 	_ = os.Remove(dst)
 	if err := os.Rename(tmp, dst); err != nil {
 		_ = os.Remove(tmp)
 		return err
 	}
 	logger.Infof("tunnel: binary downloaded to %s (%d bytes, sha256 %s)", dst, n, got)
+	return nil
+}
+
+// replaceCore downloads a core over the one in place and stops the running instances (the tunnel job starts them
+// again within moments, now from the new program). Nothing is stopped when the download fails.
+func (s *TunnelService) replaceCore(prefix string, core tunnel.Name, downloadURL, wantSHA256 string) error {
+	if err := s.downloadBinaryTo(core.BinaryPath(), downloadURL, wantSHA256); err != nil {
+		return err
+	}
+	tunnel.GetManager().StopPrefixed(prefix)
 	return nil
 }
 
@@ -1710,7 +1725,7 @@ func (s *TunnelService) DeleteOpenfluxBinary() error {
 }
 
 func (s *TunnelService) DownloadOpenfluxBinary(downloadURL, wantSHA256 string) error {
-	return s.downloadBinaryTo(tunnel.Openflux.BinaryPath(), downloadURL, wantSHA256)
+	return s.replaceCore("openflux-", tunnel.Openflux, downloadURL, wantSHA256)
 }
 
 // --- mieru core (inbound-only, lucx.117) -----------------------------------
@@ -1760,7 +1775,7 @@ func (s *TunnelService) DeleteMieruBinary() error {
 
 // DownloadMieruBinary fetches the mita binary from a URL into place.
 func (s *TunnelService) DownloadMieruBinary(downloadURL, wantSHA256 string) error {
-	return s.downloadBinaryTo(tunnel.Mieru.BinaryPath(), downloadURL, wantSHA256)
+	return s.replaceCore("mieru-", tunnel.Mieru, downloadURL, wantSHA256)
 }
 
 // --- TrustTunnel core (inbound-only, lucx.117) -----------------------------
@@ -1809,7 +1824,7 @@ func (s *TunnelService) DeleteTrustTunnelBinary() error {
 
 // DownloadTrustTunnelBinary fetches the endpoint binary from a URL into place.
 func (s *TunnelService) DownloadTrustTunnelBinary(downloadURL, wantSHA256 string) error {
-	return s.downloadBinaryTo(tunnel.TrustTunnel.BinaryPath(), downloadURL, wantSHA256)
+	return s.replaceCore("trusttunnel-", tunnel.TrustTunnel, downloadURL, wantSHA256)
 }
 
 // --- AnyTLS core (inbound-only) ---------------------------------------------

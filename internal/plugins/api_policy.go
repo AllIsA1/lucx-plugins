@@ -77,7 +77,16 @@ var apiPolicy = map[string][]APIRoute{
 		get("/xray/getOutboundsTraffic", "/xray/getXrayResult", "/xray/outbound-subs"),
 		post("/xray/", "/xray/balancerStatus"),
 	),
-	"api:xray:write":     post("/xray/update", "/xray/resetOutboundsTraffic"),
+	"api:xray:write": post("/xray/update", "/xray/resetOutboundsTraffic"),
+	// cores: whether each tunnel core is there and running (read), and replacing the three whose projects publish
+	// ready binaries (OpenFlux, mieru's mita, TrustTunnel's endpoint) by a download that must match a SHA-256 the
+	// plugin names (write). No upload, no delete, no other core: the rest are patched builds of the panel's own. The
+	// panel runs the file as root, so write is the dangerous permission it always is.
+	"api:cores:read": get(
+		"/tunnel/naive/status", "/tunnel/olcrtc/status", "/tunnel/qwdtt/status", "/tunnel/csqtt/status", "/tunnel/mieru/status",
+		"/tunnel/trusttunnel/status", "/tunnel/anytls/status", "/tunnel/tproxy/status", "/tunnel/mtproxy/status",
+		"/tunnel/openflux/status"),
+	"api:cores:write":    post("/tunnel/openflux/download", "/tunnel/mieru/download", "/tunnel/trusttunnel/download"),
 	"api:settings:read":  post("/setting/all"),
 	"api:settings:write": post("/setting/update"),
 }

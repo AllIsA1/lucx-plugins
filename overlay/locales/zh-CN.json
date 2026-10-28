@@ -76,6 +76,29 @@
         "warp": "Cloudflare WARP"
       }
     },
+    "settings": {
+      "cores": {
+        "updates": {
+          "title": "内核更新",
+          "desc": "Better Cores 插件每天检查一次 OpenFlux、mieru 和 TrustTunnel 的新版本。在此安装的版本会替换面板自带的副本，并在面板更新后重新放回。",
+          "checkNow": "立即检查",
+          "checkFailed": "无法检查更新",
+          "installFailed": "无法开始安装",
+          "available": "{n} 个更新",
+          "neverChecked": "尚未检查",
+          "lastChecked": "上次检查：{at}",
+          "nextCheck": "下次检查：{at}",
+          "panelCopy": "面板自带的副本",
+          "installedByPlugin": "由 Better Cores 安装：{tag}（{at}）",
+          "latest": "最新版本：{tag}（{at}）",
+          "releaseNotes": "版本页面",
+          "newer": "有更新版本",
+          "updateTo": "更新到 {tag}",
+          "installRelease": "安装 {tag}",
+          "reinstall": "重新安装"
+        }
+      }
+    },
     "plugins": {
       "title": "Plugins",
       "subtitle": "Extend the panel with plugins from GitHub. Each plugin lives in its own folder and never modifies panel files; removing it restores the panel to its previous state.",

@@ -76,6 +76,29 @@
         "warp": "Cloudflare WARP"
       }
     },
+    "settings": {
+      "cores": {
+        "updates": {
+          "title": "Actualizaciones de núcleos",
+          "desc": "El plugin Better Cores busca nuevas versiones de OpenFlux, mieru y TrustTunnel una vez al día. La versión que instales aquí sustituye a la copia incluida con el panel y se vuelve a poner tras actualizar el panel.",
+          "checkNow": "Comprobar ahora",
+          "checkFailed": "No se pudo buscar actualizaciones",
+          "installFailed": "No se pudo iniciar la instalación",
+          "available": "{n} actualización(es)",
+          "neverChecked": "Aún sin comprobar",
+          "lastChecked": "Última comprobación: {at}",
+          "nextCheck": "próxima comprobación: {at}",
+          "panelCopy": "Copia incluida con el panel",
+          "installedByPlugin": "Instalado por Better Cores: {tag} ({at})",
+          "latest": "Última versión: {tag} ({at})",
+          "releaseNotes": "página de la versión",
+          "newer": "Hay una más reciente",
+          "updateTo": "Actualizar a {tag}",
+          "installRelease": "Instalar {tag}",
+          "reinstall": "Instalar de nuevo"
+        }
+      }
+    },
     "plugins": {
       "title": "Plugins",
       "subtitle": "Extend the panel with plugins from GitHub. Each plugin lives in its own folder and never modifies panel files; removing it restores the panel to its previous state.",
