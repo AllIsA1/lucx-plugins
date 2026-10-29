@@ -62,7 +62,8 @@ jobs:
             tags=$(printf '%s\n' "$INPUT_TAG")
           else
             built=$(gh release list -R "$GITHUB_REPOSITORY" --limit 300 --json tagName --jq '.[].tagName' | sed -E 's/-plugins\.[0-9]+$//' | sort -u)
-            tags=$(comm -23 <(printf '%s\n' "$latest" | sed '/^$/d' | sort -V) <(printf '%s\n' "$built" | sort -V) | head -1)
+            # grep, not comm: comm wants lexical order, and a version sort (host-9 before host-10) breaks it.
+            tags=$(printf '%s\n' "$latest" | sed '/^$/d' | { grep -vxFf <(printf '%s\n' "$built") || true; } | head -1)
           fi
           if [ -z "$tags" ]; then
             echo "nothing to build"
