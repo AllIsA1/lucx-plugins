@@ -79,7 +79,7 @@ func relayHarness(t *testing.T) (public http.Handler, internal http.Handler, nod
 	api := engine.Group("/panel/api")
 	api.Use(a.checkAPIAuth)
 	api.Use(a.enforceTokenScope)
-	api.Use(middleware.CSRFMiddleware())
+	api.Use(middleware.CSRFMiddleware(getRemoteIp))
 	NewPluginRelayController(api.Group("/lucx"))
 	// What a logged-in administrator's browser looks like on the public listener.
 	adminEngine := gin.New()

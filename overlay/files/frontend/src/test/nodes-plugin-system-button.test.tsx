@@ -37,7 +37,8 @@ const status = (over: Partial<NodePluginStatus>): NodePluginStatus => ({
 const report = (list: NodePluginStatus[]) =>
   vi.mocked(pluginsApi.nodes).mockResolvedValue(new Msg<NodePluginStatus[]>(true, '', list));
 
-const open = () => fireEvent.click(screen.getByRole('button', { name: /plugin system on the node/i }));
+const open = () =>
+  fireEvent.click(screen.getByRole('button', { name: /plugin system on the node/i }));
 
 describe('pluginSystemStep', () => {
   it('says what the node needs next', () => {
@@ -46,7 +47,9 @@ describe('pluginSystemStep', () => {
     expect(pluginSystemStep(status({ state: 'locked' }))).toBe('allow');
     expect(pluginSystemStep(status({ state: 'ok' }))).toBe('ready');
     expect(
-      pluginSystemStep(status({ plugins: report0({ available: true, allowMasterManagement: false }) })),
+      pluginSystemStep(
+        status({ plugins: report0({ available: true, allowMasterManagement: false }) }),
+      ),
     ).toBe('allow');
     expect(pluginSystemStep(status({ state: 'pending' }))).toBe('wait');
     expect(pluginSystemStep(status({ state: 'offline' }))).toBe('failed');
@@ -88,7 +91,9 @@ describe('NodePluginSystemButton', () => {
     report([status({ state: 'locked' })]);
     renderWithProviders(<NodePluginSystemButton nodeId={1} nodeName="pl-warsaw" />);
     open();
-    await waitFor(() => expect(screen.queryByText(/does not let this panel manage/i)).not.toBeNull());
+    await waitFor(() =>
+      expect(screen.queryByText(/does not let this panel manage/i)).not.toBeNull(),
+    );
     expect(screen.queryByText(PLUGIN_SYSTEM_INSTALL_COMMAND)).toBeNull();
   });
 

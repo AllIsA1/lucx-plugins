@@ -30,7 +30,7 @@ export default function SubConfigsTab({ links, linkNames, onCopy }: SubConfigsTa
     <div className="sub-rows">
       <div className="sub-configs-bar">
         <Button
-          icon={<CopyOutlined />}
+          icon={<CopyOutlined aria-hidden />}
           onClick={() => onCopy(links.join('\n'), t('subscription.copyAllConfigsCopied'))}
         >
           {t('subscription.copyAllConfigs')}
@@ -52,7 +52,7 @@ export default function SubConfigsTab({ links, linkNames, onCopy }: SubConfigsTa
                 </span>
                 <div className="sub-row-actions">
                   <Button
-                    icon={<CopyOutlined />}
+                    icon={<CopyOutlined aria-hidden />}
                     onClick={() => onCopy(link)}
                     aria-label={t('copy')}
                     title={t('copy')}

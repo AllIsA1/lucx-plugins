@@ -21,7 +21,11 @@
   }
 
   function remember(message) {
-    context = { pluginId: message.pluginId || (context && context.pluginId) || '', theme: message.theme, lang: message.lang };
+    context = {
+      pluginId: message.pluginId || (context && context.pluginId) || '',
+      theme: message.theme,
+      lang: message.lang,
+    };
     listeners.slice().forEach(function (listener) {
       listener(context);
     });
@@ -29,11 +33,20 @@
 
   window.addEventListener('message', function (event) {
     var message = event.data;
-    if (event.source !== window.parent || !message || typeof message !== 'object' || message.lucx !== 1) return;
+    if (
+      event.source !== window.parent ||
+      !message ||
+      typeof message !== 'object' ||
+      message.lucx !== 1
+    )
+      return;
     if (message.type === 'init' || message.type === 'context') {
       remember(message);
       if (message.type === 'init') resolveReady(context);
-    } else if (message.type === 'fetch-result' && Object.prototype.hasOwnProperty.call(pending, message.id)) {
+    } else if (
+      message.type === 'fetch-result' &&
+      Object.prototype.hasOwnProperty.call(pending, message.id)
+    ) {
       var call = pending[message.id];
       delete pending[message.id];
       window.clearTimeout(call.timer);
@@ -74,7 +87,14 @@
           resolve({ ok: false, status: 0, error: 'timeout' });
         }, CALL_TIMEOUT_MS);
         pending[id] = { resolve: resolve, timer: timer };
-        post({ lucx: 1, type: 'fetch', id: id, method: String(opts.method || 'GET').toUpperCase(), path: path, body: opts.body });
+        post({
+          lucx: 1,
+          type: 'fetch',
+          id: id,
+          method: String(opts.method || 'GET').toUpperCase(),
+          path: path,
+          body: opts.body,
+        });
       });
     },
     // Marks the document with the panel's theme so your CSS can follow it: data-theme="dark|light",

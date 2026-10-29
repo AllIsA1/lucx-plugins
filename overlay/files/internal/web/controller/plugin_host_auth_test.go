@@ -36,7 +36,7 @@ func hostEngine(t *testing.T) (public, internal http.Handler, served *[]string) 
 	api := engine.Group("/panel/api")
 	api.Use(a.checkAPIAuth)
 	api.Use(a.enforceTokenScope)
-	api.Use(middleware.CSRFMiddleware())
+	api.Use(middleware.CSRFMiddleware(getRemoteIp))
 	ok := func(c *gin.Context) {
 		log = append(log, c.Request.Method+" "+c.FullPath())
 		c.JSON(http.StatusOK, gin.H{"reached": true, "authed": c.GetBool("api_authed"), "plugin": c.GetString("plugin_id")})

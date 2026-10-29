@@ -67,7 +67,8 @@ export default function NodePluginSystemButton({ nodeId, nodeName }: Props) {
     }
   };
 
-  const alertType = step === 'ready' ? 'success' : step === 'install' || step === 'failed' ? 'warning' : 'info';
+  const alertType =
+    step === 'ready' ? 'success' : step === 'install' || step === 'failed' ? 'warning' : 'info';
 
   return (
     <>
@@ -93,9 +94,7 @@ export default function NodePluginSystemButton({ nodeId, nodeName }: Props) {
             type={alertType}
             showIcon
             message={t(`pages.plugins.nodeSystem.state.${step}`)}
-            description={
-              step === 'failed' && status?.error ? status.error : undefined
-            }
+            description={step === 'failed' && status?.error ? status.error : undefined}
           />
           {step === 'wait' ? null : step === 'ready' ? (
             <Typography.Paragraph>{t('pages.plugins.nodeSystem.readyHelp')}</Typography.Paragraph>
@@ -103,7 +102,9 @@ export default function NodePluginSystemButton({ nodeId, nodeName }: Props) {
             <Typography.Paragraph>{t('pages.plugins.nodeSystem.allowHelp')}</Typography.Paragraph>
           ) : (
             <>
-              <Typography.Paragraph>{t('pages.plugins.nodeSystem.installHelp')}</Typography.Paragraph>
+              <Typography.Paragraph>
+                {t('pages.plugins.nodeSystem.installHelp')}
+              </Typography.Paragraph>
               <Typography.Paragraph>
                 <Typography.Text code copyable={false} style={{ wordBreak: 'break-all' }}>
                   {PLUGIN_SYSTEM_INSTALL_COMMAND}
