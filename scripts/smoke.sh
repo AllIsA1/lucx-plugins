@@ -14,6 +14,8 @@ d=$(mktemp -d)
 export XUI_PORT=$PORT XUI_DB_FOLDER="$d/db" XUI_BIN_FOLDER="$d/bin" XUI_LOG_FOLDER="$d/log" \
   XUI_PLUGIN_HOST_SOCKET="$d/host.sock" XUI_PLUGIN_INTERNAL_SOCKET="$d/internal.sock"
 mkdir -p "$XUI_DB_FOLDER" "$XUI_BIN_FOLDER" "$XUI_LOG_FOLDER"
+# Newer panels invent a random login on the first start; this one fixes it.
+"$BIN" setting -username admin -password admin > /dev/null
 "$BIN" > "$d/panel.log" 2>&1 &
 pid=$!
 hostpid=
